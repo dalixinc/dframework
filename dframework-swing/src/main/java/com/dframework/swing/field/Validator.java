@@ -1,5 +1,6 @@
 package com.dframework.swing.field;
 
+import java.math.BigInteger;
 import java.text.MessageFormat;
 import java.util.Objects;
 import java.util.Optional;
@@ -61,33 +62,36 @@ public interface Validator {
         return optional(of(text -> pattern.matcher(text).matches(), message));
     }
 
-    /** A plausible email address (something@something.something). */
+    /**
+     * A practical email address check: dot-separated local part, then a
+     * domain of hyphen-safe labels ending in a top-level domain of two or more
+     * letters. Rarely used forms such as quoted local parts are rejected.
+     */
     static Validator email() {
-        return matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+", DResources.message("validation.email"));
+        String atom = "[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+";
+        String label = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+        return matches(atom + "(?:\\." + atom + ")*@(?:" + label + "\\.)+[A-Za-z]{2,}",
+                DResources.message("validation.email"));
     }
 
-    /** A whole number. */
+    /** A whole number: ASCII digits with an optional leading minus sign. */
     static Validator integer() {
-        return optional(of(Validator::isInteger, DResources.message("validation.integer")));
+        // ASCII only: Long.parseLong would also accept "+5" and Arabic-Indic digits.
+        Pattern integer = Pattern.compile("-?[0-9]+");
+        return optional(of(text -> integer.matcher(text.strip()).matches(), DResources.message("validation.integer")));
     }
 
     /** A whole number from {@code min} to {@code max} inclusive. */
     static Validator integer(long min, long max) {
         String message = MessageFormat.format(DResources.message("validation.range"),
                 String.valueOf(min), String.valueOf(max));
+        BigInteger low = BigInteger.valueOf(min);
+        BigInteger high = BigInteger.valueOf(max);
+        // BigInteger, so a 30-digit entry gets the range message rather than overflowing.
         return integer().and(optional(of(text -> {
-            long value = Long.parseLong(text.strip());
-            return value >= min && value <= max;
+            BigInteger value = new BigInteger(text.strip());
+            return value.compareTo(low) >= 0 && value.compareTo(high) <= 0;
         }, message)));
-    }
-
-    private static boolean isInteger(String text) {
-        try {
-            Long.parseLong(text.strip());
-            return true;
-        } catch (NumberFormatException e) {
-            return false;
-        }
     }
 
     /** Lets empty text through, so only fields marked {@link #required()} insist on a value. */

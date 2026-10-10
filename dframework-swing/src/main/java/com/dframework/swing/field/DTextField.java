@@ -16,7 +16,11 @@ import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
+import javax.swing.text.DocumentFilter;
 
 import com.formdev.flatlaf.FlatClientProperties;
 import com.formdev.flatlaf.FlatLaf;
@@ -25,6 +29,8 @@ import com.formdev.flatlaf.FlatLaf;
  * A {@link JTextField} with built-in validation and a focus highlight.
  *
  * <ul>
+ * <li><b>Input filtering.</b> Give it an {@link InputFilter} and edits that
+ * would break the filter are blocked, e.g. letters in a number field.
  * <li><b>Validation.</b> Give it a {@link Validator} and it checks the text as
  * the user types. Errors appear only once the user has visited the field (or
  * {@link #validateInput()} is called), as a red outline plus a tooltip giving
@@ -51,6 +57,8 @@ public class DTextField extends JTextField {
     private static final Color ERROR_COLOR = new Color(0xE0, 0x3E, 0x3E);
 
     private transient Validator validator;
+    private transient InputFilter inputFilter;
+    private final transient DocumentFilter documentFilter = new FilteringDocumentFilter();
     private transient FocusHighlighter highlighter;
     private transient DocumentListener documentListener;
     private String validationMessage;
@@ -84,6 +92,7 @@ public class DTextField extends JTextField {
             }
         };
         getDocument().addDocumentListener(documentListener);
+        installDocumentFilter(getDocument());
         addFocusListener(new FocusAdapter() {
             @Override
             public void focusLost(FocusEvent e) {
@@ -106,6 +115,19 @@ public class DTextField extends JTextField {
     public void setValidator(Validator validator) {
         this.validator = validator;
         runValidation();
+    }
+
+    /** The input filter, if any. */
+    public Optional<InputFilter> getInputFilter() {
+        return Optional.ofNullable(inputFilter);
+    }
+
+    /**
+     * Sets what the user may type; {@code null} allows anything. Text already
+     * in the field is left alone, but {@link #setText} is filtered like typing.
+     */
+    public void setInputFilter(InputFilter inputFilter) {
+        this.inputFilter = inputFilter;
     }
 
     /** Whether the current text passes the validator. Always true without one. */
@@ -168,6 +190,7 @@ public class DTextField extends JTextField {
         if (documentListener != null) {
             getDocument().removeDocumentListener(documentListener);
             doc.addDocumentListener(documentListener);
+            installDocumentFilter(doc);
         }
         super.setDocument(doc);
         if (documentListener != null) {
@@ -194,6 +217,43 @@ public class DTextField extends JTextField {
             } finally {
                 g2.dispose();
             }
+        }
+    }
+
+    private void installDocumentFilter(Document doc) {
+        if (doc instanceof AbstractDocument abstractDoc) {
+            abstractDoc.setDocumentFilter(documentFilter);
+        }
+    }
+
+    /** Checks each edit against {@link #inputFilter} before letting it through. */
+    private final class FilteringDocumentFilter extends DocumentFilter {
+
+        @Override
+        public void insertString(FilterBypass fb, int offset, String text, AttributeSet attrs)
+                throws BadLocationException {
+            replace(fb, offset, 0, text, attrs);
+        }
+
+        @Override
+        public void remove(FilterBypass fb, int offset, int length) throws BadLocationException {
+            replace(fb, offset, length, "", null);
+        }
+
+        @Override
+        public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs)
+                throws BadLocationException {
+            String insert = text == null ? "" : text;
+            if (inputFilter != null) {
+                Document doc = fb.getDocument();
+                String current = doc.getText(0, doc.getLength());
+                String proposed = current.substring(0, offset) + insert + current.substring(offset + length);
+                if (!inputFilter.accept(proposed)) {
+                    UIManager.getLookAndFeel().provideErrorFeedback(DTextField.this);
+                    return;
+                }
+            }
+            fb.replace(offset, length, insert, attrs);
         }
     }
 

@@ -15,14 +15,15 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JTextField;
 
 import com.dframework.swing.field.DTextField;
 import com.dframework.swing.field.FocusHighlighter;
+import com.dframework.swing.field.InputFilter;
 import com.dframework.swing.field.Validator;
+import com.dframework.swing.notify.DToast;
 
 /** Demonstrates {@link DTextField} validation and focus highlighting. */
 final class FieldsScreen {
@@ -41,13 +42,18 @@ final class FieldsScreen {
     }
 
     static JComponent create() {
+        // Filters block bad keystrokes; validators judge the finished value.
         DTextField name = new DTextField(24);
-        name.setValidator(Validator.required().and(Validator.maxLength(40)));
+        name.setInputFilter(InputFilter.maxLength(40));
+        name.setValidator(Validator.required());
         DTextField email = new DTextField(24);
+        email.setInputFilter(InputFilter.regex("\\S*").and(InputFilter.maxLength(254)));
         email.setValidator(Validator.required().and(Validator.email()));
         DTextField age = new DTextField(6);
+        age.setInputFilter(InputFilter.digits().and(InputFilter.maxLength(3)));
         age.setValidator(Validator.integer(0, 130));
         DTextField postcode = new DTextField(10);
+        postcode.setInputFilter(InputFilter.regex("[A-Za-z0-9 ]*").and(InputFilter.maxLength(8)));
         postcode.setValidator(Validator.matches("(?i)[A-Z]{1,2}\\d[A-Z\\d]? ?\\d[A-Z]{2}",
                 "Enter a UK postcode, like SW1A 1AA"));
         List<DTextField> fields = List.of(name, email, age, postcode);
@@ -61,8 +67,7 @@ final class FieldsScreen {
         updateSubmit.run();
         submit.addActionListener(e -> {
             if (fields.stream().allMatch(DTextField::validateInput)) {
-                JOptionPane.showMessageDialog(submit, "Thanks, " + name.getText().strip() + "!",
-                        "Submitted", JOptionPane.INFORMATION_MESSAGE);
+                DToast.success(submit, "Thanks, " + name.getText().strip() + "! Form submitted.");
             }
         });
         JButton clear = new JButton("Clear");
@@ -76,10 +81,10 @@ final class FieldsScreen {
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(6, 8, 6, 8);
         c.anchor = GridBagConstraints.WEST;
-        row(form, c, 0, "Name *", name, "Required, up to 40 characters");
-        row(form, c, 1, "Email *", email, "Required, must look like an email address");
-        row(form, c, 2, "Age", age, "Optional, a whole number from 0 to 130");
-        row(form, c, 3, "Postcode", postcode, "Optional, a UK postcode");
+        row(form, c, 0, "Name *", name, "Required; typing stops at 40 characters");
+        row(form, c, 1, "Email *", email, "Required; spaces are blocked");
+        row(form, c, 2, "Age", age, "Optional; digits only, 0 to 130");
+        row(form, c, 3, "Postcode", postcode, "Optional; letters, digits and space only");
         row(form, c, 4, "Plain field", plain, "A standard JTextField, for comparison");
         c.gridy = 5;
         c.gridx = 1;

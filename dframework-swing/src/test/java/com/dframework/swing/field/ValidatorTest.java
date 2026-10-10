@@ -26,6 +26,29 @@ class ValidatorTest {
     }
 
     @Test
+    void emailRejectsMalformedAddresses() {
+        for (String bad : new String[] {"a@b..com", ".a@b.com", "a.@b.com", "a@b.com.", "a@-b.com", "a@b.c", "a b@c.com"}) {
+            assertThat(Validator.email().validate(bad)).as(bad).isPresent();
+        }
+        for (String good : new String[] {"a@b.co", "first.last+tag@sub.example.org", "o'neil@x-y.ie"}) {
+            assertThat(Validator.email().validate(good)).as(good).isEmpty();
+        }
+    }
+
+    @Test
+    void integerIsAsciiOnly() {
+        assertThat(Validator.integer().validate("+42")).isPresent();
+        assertThat(Validator.integer().validate("\u0664\u0662")).isPresent();   // Arabic-Indic 42
+        assertThat(Validator.integer().validate("-7")).isEmpty();
+    }
+
+    @Test
+    void hugeNumberGetsTheRangeMessage() {
+        assertThat(Validator.integer(0, 130).validate("99999999999999999999"))
+                .contains("Enter a number from 0 to 130");
+    }
+
+    @Test
     void integerRange() {
         Validator age = Validator.integer(0, 1000);
 

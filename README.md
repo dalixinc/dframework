@@ -43,8 +43,12 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   puts DFramework's classic spinning road-sign icons on *every*
   `JOptionPane` in the app, including plain `JOptionPane.showMessageDialog`
   calls. They survive theme switches; `Style.LOOK_AND_FEEL` turns them off.
-- **`DTextField`** (rebuilt from 2007): a text field with live validation and a
-  focus highlight.
+- **`DTextField`** (rebuilt from 2007): a text field with input filtering,
+  live validation and a focus highlight.
+  - **Input filtering:** `field.setInputFilter(InputFilter.digits().and(InputFilter.maxLength(3)))`
+    blocks keystrokes and pastes that would break the filter, with a beep.
+    Filters: `digits`, `integer`, `maxLength`, `chars`, `regex`. Use a filter
+    to keep bad input out, and a validator to judge the finished value.
   - **Validation:** `field.setValidator(Validator.required().and(Validator.email()))`.
     Errors show as a red outline with the message in a tooltip, but only once
     the user has visited the field. Listen for `INPUT_VALID_PROPERTY` to
@@ -65,6 +69,17 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   DOutlookBar bar = new DOutlookBar();
   bar.addGroup("Logging").addItem("Log Call", icon, e -> cards.show(main, "log"));
   bar.addGroup("Reports").addItem("Customer\nGroups", icon, e -> ...);
+  ```
+- **`DToggleSwitch`**: an animated on/off switch with an optional label.
+  It's a `JToggleButton`, so `isSelected()`, listeners, `Action`s and
+  keyboard all work as usual. Uses the theme's accent colour unless you call
+  `setOnColor(...)`.
+- **`DToast`**: non-blocking notifications that slide into a corner of the
+  window and fade away. They stack, pause on hover and close on click.
+  ```java
+  DToast.success(frame, "Saved");
+  DToast.builder(frame).type(DToast.Type.WARNING).title("Deleted 3 calls")
+          .message("They are in the bin for 30 days.").action("Undo", this::undo).show();
   ```
 - **`ConfirmCloser`**: an "are you sure?" prompt that works as both a
   `WindowListener` and an `ActionListener`, so the close button and a

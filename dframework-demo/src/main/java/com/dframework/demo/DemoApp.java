@@ -89,6 +89,7 @@ public final class DemoApp {
         DOutlookBar.Group showcase = bar.addGroup("Showcase");
         addScreen(showcase, screens, cards, "Controls", "ScreenPos.GIF", ShowcaseScreens.controls());
         addScreen(showcase, screens, cards, "Fields", "check.GIF", FieldsScreen.create());
+        addScreen(showcase, screens, cards, "Toasts", "food24.gif", ToastsScreen.create());
         addScreen(showcase, screens, cards, "Table", "BOOK02.GIF", ShowcaseScreens.table());
         addScreen(showcase, screens, cards, "Notes", "Log.gif", ShowcaseScreens.notes());
 

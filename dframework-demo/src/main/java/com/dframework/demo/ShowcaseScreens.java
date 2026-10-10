@@ -1,6 +1,7 @@
 package com.dframework.demo;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -27,6 +28,10 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingConstants;
+
+import com.dframework.swing.button.DToggleSwitch;
+import com.dframework.swing.theme.DTheme;
+import com.dframework.swing.theme.ThemeManager;
 
 /** The demo's simpler screens. */
 final class ShowcaseScreens {
@@ -61,6 +66,18 @@ final class ShowcaseScreens {
         JButton disabled = new JButton("Disabled");
         disabled.setEnabled(false);
         row(form, c, 6, "Buttons", flow(new JButton("Testing"), new JToggleButton("Toggle"), disabled));
+
+        DToggleSwitch darkMode = new DToggleSwitch("Dark mode",
+                ThemeManager.current().map(DTheme::isDark).orElse(false));
+        // ActionListener, not ItemListener: only real clicks switch theme, not the sync below.
+        darkMode.addActionListener(e -> ThemeManager.apply(darkMode.isSelected() ? DTheme.FLAT_DARK : DTheme.FLAT_LIGHT));
+        ThemeManager.addThemeListener(theme -> darkMode.setSelected(theme.isDark()));
+        DToggleSwitch locked = new DToggleSwitch("Locked", true);
+        locked.setEnabled(false);
+        DToggleSwitch green = new DToggleSwitch("Custom colour", true);
+        green.setOnColor(new Color(0x27AE60));
+        row(form, c, 7, "Switches", flow(darkMode, new DToggleSwitch("Wi-Fi", true),
+                new DToggleSwitch("Bluetooth"), green, locked));
 
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
