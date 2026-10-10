@@ -4,6 +4,13 @@ A Swing metaframework that extends the standard Swing components to give a
 better experience out of the box. First written in 2001, revived in 2026 for
 Java 21.
 
+## Documentation
+
+- **[User Guide](docs/USER_GUIDE.md)**: what DFramework does and how to use
+  every component, with examples.
+- **[Technical Manual](docs/TECHNICAL_MANUAL.md)**: architecture, design
+  decisions, the traps we hit, and conventions for contributors.
+
 ## Modules
 
 | Module | Contents |
