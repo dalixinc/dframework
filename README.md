@@ -32,6 +32,7 @@ build (`UserGuideExamplesTest`), so they can't drift from the API.
 | `dframework-demo` | Showcase app: Outlook-bar navigation, live theme switcher, validated fields |
 | `dframework-dig` | **DNS Dig**, a plugin: run `dig` lookups and see exactly what runs |
 | `dframework-git` | **Git Browser**, a plugin: explore a repository read-only, with a drawn commit graph and git's raw objects, and see exactly what runs |
+| `dframework-time` | **Time in Java**, a plugin for talks: Java's date and time APIs from 1996 to today, then GPS and Einstein, every example compiled and run live |
 | `dframework-ai` | Claude-backed `AiAssistant` (Anthropic Java SDK), found at runtime; powers **Explain with AI** in DNS Dig and the Git Browser |
 
 A JavaFX module is planned.
@@ -172,6 +173,11 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   Browser is strictly read-only. It offers common commands from a dropdown,
   a commit graph, and an object inspector (commits, trees, blobs) whose
   Object box lists recent objects, branches, tags and the graph's commits.
+  **Time in Java** is a talk in a plugin. It covers 17 lessons, from
+  `new Date(2026, 10, 10)` being November 3926 to the relativistic
+  correction for GPS clocks. Each sets the pitfall beside its fix, and both
+  are compiled and run live, so the presenter can edit them in front of an
+  audience.
   Plugins can also use an AI assistant (`AiAssistant`): with `dframework-ai`
   and an `ANTHROPIC_API_KEY`, Claude explains a result in plain English.
 - **Tool-plugin parts** (`CommandRunner`, `CommandLines`, `DCommandPane`,

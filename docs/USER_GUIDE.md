@@ -48,10 +48,11 @@ containing a sortable, searchable table with a live row count.
 18. [Plugins: `DPlugin` and `DPluginHost`](#18-plugins-dplugin-and-dpluginhost)
 19. [The DNS Dig plugin](#19-the-dns-dig-plugin)
 20. [The Git Browser plugin](#20-the-git-browser-plugin)
-21. [Building tool plugins: `CommandRunner`, `DCommandPane`, `DExplainPane`](#21-building-tool-plugins-commandrunner-dcommandpane-dexplainpane)
-22. [Resources: `DResources`](#22-resources-dresources)
-23. [Putting it together](#23-putting-it-together)
-24. [Tips, rules and FAQ](#24-tips-rules-and-faq)
+21. [The Time in Java plugin](#21-the-time-in-java-plugin)
+22. [Building tool plugins: `CommandRunner`, `DCommandPane`, `DExplainPane`](#22-building-tool-plugins-commandrunner-dcommandpane-dexplainpane)
+23. [Resources: `DResources`](#23-resources-dresources)
+24. [Putting it together](#24-putting-it-together)
+25. [Tips, rules and FAQ](#25-tips-rules-and-faq)
 
 ---
 
@@ -151,6 +152,7 @@ Run it and try closing the window. You'll be asked first.
 | **Admin** | Users, Settings, Backup, About | Placeholders, and an About box with a spinning sign, the DFramework version, the Java version and the theme |
 | **Plugins** | DNS Dig | A plugin found at runtime: run `dig` lookups, see the parsed answers, and see exactly which command runs |
 | | Git Browser | Explore a git repository read-only: common commands from a dropdown, a drawn commit graph, and git's raw objects (commits, trees, blobs) |
+| | Time in Java | A talk in a plugin: Java's date and time APIs from 1996 to today, then GPS and Einstein, every example compiled and run live |
 
 Things to try:
 
@@ -169,6 +171,8 @@ Things to try:
   on the right. Hover over the version to see the Java version.
 - **Plugins › Git Browser › Graph**: the history as a graph. Double-click a
   commit to open it in Objects.
+- **Plugins › Time in Java**: press **Run both** on lesson 5 and watch a
+  shared `SimpleDateFormat` fall apart, then Page Down through to Einstein.
 
 ---
 
@@ -1267,7 +1271,98 @@ instructions.
 
 ---
 
-## 21. Building tool plugins: `CommandRunner`, `DCommandPane`, `DExplainPane`
+## 21. The Time in Java plugin
+
+**Time in Java** (the `dframework-time` module) is a plugin for giving a
+talk. It shows how hard time is to handle, by walking through Java's own
+attempts: `java.util.Date` (1996), `Calendar` (1997), Joda-Time (2005) and
+`java.time` (2014). Then it goes beyond the calendar, to leap seconds, GPS
+time and Einstein's correction for GPS clocks.
+
+**Every example runs live.** When you press **Run**, the code on screen is
+compiled by the JDK's own compiler and run, and what it prints appears
+underneath. Nothing is canned:
+- **Live editing:** you can change the code in front of an audience and run
+  it again. **Reset** puts the original back.
+- **The whole file:** **Whole file…** shows the complete source that's
+  compiled, imports included.
+
+### A lesson
+
+Each lesson has:
+- a title and a short story setting the scene;
+- **two examples:** on the left, in red, the pitfall, usually the old API;
+  on the right, in green, the fix, usually `java.time`;
+- a **takeaway**: one line to remember.
+
+The two examples sit side by side on a wide screen, and one above the other
+on a narrow one. In a small window the lesson scrolls, rather than
+squeezing the code.
+
+The output shows what the code printed. It also shows:
+- the compiler's warnings, in amber, such as "`Date(int,int,int)` has been
+  deprecated";
+- any exception, in red, with the line that threw it. In some lessons, the
+  exception *is* the fix: `LocalDate.of(2026, 2, 30)` refuses to make a
+  30 February;
+- how long compiling and running took.
+
+### The lessons
+
+| Era | Lessons |
+|---|---|
+| 1996 `java.util.Date` | 1. Year 3926, month 11 · 2. A Date isn't a date · 3. The date that changed itself |
+| 1997 `Calendar` | 4. February 30th is March 2nd · 5. SimpleDateFormat and threads · 6. YYYY isn't yyyy · 7. Same date, ten days apart |
+| 2005 Joda-Time | 8. Joda-Time: the fix that came first · 9. The hour that doesn't exist |
+| 2014 `java.time` | 10. A day isn't 24 hours · 11. 31 January plus a month · 12. How old are you? · 13. Nine o'clock where? · 14. Testing tomorrow, today |
+| GPS and Einstein | 15. 23:59:60 · 16. GPS time: 18 seconds ahead · 17. Einstein's correction |
+
+A few highlights:
+- **Lesson 5** shares one `SimpleDateFormat` between eight threads.
+  Hundreds of the 4,000 parses come back as wrong dates or exceptions, and
+  the numbers change on every run. The `java.time` version gets none.
+- **Lesson 7:** Shakespeare and Cervantes both died on 23 April 1616, ten
+  days apart, because England and Spain used different calendars.
+- **Lesson 17** works out the special and general relativity effects on a
+  GPS satellite's clock (−7.2 and +45.7 µs a day). That's about 12 km a
+  day of error if uncorrected. It then shows the fix: the satellite clocks
+  are set to 10.22999999543 MHz before launch.
+
+### Presenting
+
+- **Moving between lessons:** Page Down and Page Up (what presentation
+  clickers send), the arrow keys, or **Previous** and **Next**. The
+  **timeline** at the top shows where you are; click an era to jump there.
+- **Running:** **Run both** runs the old way, then the new way, as does
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd>.
+  <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs the example you're editing.
+- **Presenter mode** enlarges all the text and buttons and hides the
+  lesson list, for a projector.
+- **Remembered:** the lesson you were on and presenter mode, so you can set
+  up before the talk.
+- **The command palette** has *Next Lesson*, *Previous Lesson*, *Run Both
+  Examples* and *Presenter Mode On or Off*.
+
+**Explain with AI** (when an AI assistant is installed) explains the last
+example run: the code, its output, and the lesson it illustrates.
+
+**Under the hood** starts collapsed here, because in a talk the examples
+come first. It shows the equivalent `javac` command and lists every
+example run this session; each run is recorded in the audit log as *run*,
+noting whether the code had been edited.
+
+**Requirements.** The examples need a JDK, not just a Java runtime, because
+they're compiled as you watch. Without a compiler, the lessons still show,
+but **Run** is disabled. The Joda-Time lessons use the Joda-Time library,
+which the module brings with it.
+
+**They can't break before the talk.** A test runs every example and checks
+that it still prints what its lesson says it does. If a JDK or Joda-Time
+update ever changes a result, the build fails rather than your demo.
+
+---
+
+## 22. Building tool plugins: `CommandRunner`, `DCommandPane`, `DExplainPane`
 
 DNS Dig and the Git Browser are built from three library components, ready
 for your own command-line tools.
@@ -1310,7 +1405,7 @@ context.audit("run", Map.of("command", CommandLines.display(environment, command
 
 ---
 
-## 22. Resources: `DResources`
+## 23. Resources: `DResources`
 
 Icons and text load from the **classpath**, so they work the same from an
 IDE, a jar or an installer:
@@ -1340,7 +1435,7 @@ been through the build, it reads `development`.
 
 ---
 
-## 23. Putting it together
+## 24. Putting it together
 
 A small but complete application using most of the framework:
 
@@ -1400,7 +1495,7 @@ public final class Tracker {
 
 ---
 
-## 24. Tips, rules and FAQ
+## 25. Tips, rules and FAQ
 
 **Do I have to use the Swing event thread?**
 Yes, as with all Swing: create and change components on the event dispatch

@@ -12,6 +12,7 @@ dependencies {
     // Plugins are found at runtime through ServiceLoader; the demo's code never refers to them.
     runtimeOnly(project(":dframework-dig"))
     runtimeOnly(project(":dframework-git"))
+    runtimeOnly(project(":dframework-time"))
     // The Claude-backed AI assistant, also found at runtime (needs ANTHROPIC_API_KEY to answer).
     runtimeOnly(project(":dframework-ai"))
 }

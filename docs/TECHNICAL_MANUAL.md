@@ -135,6 +135,9 @@ graph LR
     demo -. "runtime (ServiceLoader)" .-> dig
     git["dframework-git<br/><i>Git Browser plugin</i>"] --> swing
     demo -. "runtime (ServiceLoader)" .-> git
+    time["dframework-time<br/><i>Time in Java plugin</i>"] --> swing
+    time --> joda["Joda-Time 2.14.4"]
+    demo -. "runtime (ServiceLoader)" .-> time
     ai["dframework-ai<br/><i>Claude assistant</i>"] --> swing
     ai --> sdk["Anthropic Java SDK 2.65.0"]
     demo -. "runtime (ServiceLoader)" .-> ai
@@ -148,6 +151,7 @@ graph LR
 | `dframework-demo` | The showcase (`./gradlew :dframework-demo:run`). It's also the integration test bed: every component is used here as an application would use it |
 | `dframework-ai` | `ClaudeAssistant`, an `AiAssistant` backed by the Anthropic Java SDK. Optional, so the library itself carries no SDK dependencies; found through `ServiceLoader` |
 | `dframework-git` | The Git Browser plugin. Like DNS Dig, the demo has it only on its runtime classpath |
+| `dframework-time` | The Time in Java plugin, a talk about date and time APIs whose examples are compiled and run live. It brings Joda-Time with it, for the Joda-Time lessons |
 | `dframework-dig` | The DNS Dig plugin. It depends on the library; the demo has it only on its *runtime* classpath and finds it through `ServiceLoader`, which proves the plugin mechanism end to end |
 | `buildSrc` | One convention plugin shared by every module |
 
@@ -155,7 +159,7 @@ graph LR
 
 | Package | Contents |
 |---|---|
-| *(root)* | `DFrame`, `CloseAction`, `WindowState`, `WindowMemory` |
+| *(root)* | `DFrame`, `CloseAction`, `WindowState`, `WindowMemory`, `DFramework` (the version) |
 | `theme` | `DTheme`, `ThemeManager`, `ThemeException` |
 | `close` | `ConfirmCloser` |
 | `dialog` | `MessageIcons`, `MessageType` |
@@ -1285,9 +1289,95 @@ and filtering is not offered.
 
 ---
 
+### 6.24 Time in Java (`dframework-time`)
+
+**Run the real thing.** A talk about pitfalls is only convincing if the
+pitfalls really happen, in front of the audience. So the examples aren't
+screenshots or canned output. `SnippetRunner` compiles each one with the
+JDK's compiler (`javax.tools`) and runs it, and the presenter can edit the
+code live.
+- **The rejected alternative: lambdas.** Precompiled lambdas next to their
+  source text would be faster to start. But the text shown and the code run
+  could drift apart, and live editing would be impossible.
+- **Compilation, in memory:** a `ForwardingJavaFileManager` keeps the class
+  bytes in a map, and a throwaway `ClassLoader` per run defines them. The
+  plugin's own loader is its parent, so Joda-Time is visible.
+- **Options:** `--release 21 -proc:none -Xlint:deprecation -g`.
+  Deprecation warnings are kept on purpose: "`Date(int,int,int)` has been
+  deprecated" is part of the lesson.
+- **The class path:** `java.class.path`, plus Joda-Time's jar located
+  through its `CodeSource`, in case the plugin is loaded some other way.
+- **Speed:** the first compile in a JVM takes about 0.6 seconds. Later
+  ones take 30 to 120 ms. `onShow` compiles a trivial snippet in the
+  background, so the first Run in front of an audience is quick.
+
+**The snippet format.** A snippet is the body of `run(PrintStream out)`.
+- **Imports:** leading `import` lines are lifted out as imports. The common
+  `java.time`, `java.text`, `java.util` and concurrency packages are
+  imported on demand.
+- **Joda-Time clashes:** Joda-Time's `DateTime` or `LocalDate` would clash
+  with the wildcard imports. Joda-Time snippets therefore use single-type
+  imports, which take precedence over on-demand ones (JLS 6.4.1). That's
+  also more honest on screen.
+- **Line numbers** in compile errors and stack traces are given relative to
+  the snippet, so "line 2" means line 2 of what's on screen. The first
+  version was off by one; the runner's tests caught it.
+
+**Containment.** Snippets are the presenter's own code on their own machine,
+so they run with full permissions; there's no sandbox to pretend
+otherwise. Two limits stop an accident from hanging the talk:
+- **Time:** each run gets its own daemon thread and 15 seconds. After that
+  the runner reports *timed out* and moves on. Java can't kill a thread, so
+  a runaway loop keeps a core busy until the application exits.
+- **Output:** captured output stops at 200,000 bytes.
+
+**Lessons are data, checked by a test.** `Lessons` holds 17 `Lesson`
+records: era, title, story, a before and after `Snippet`, and a takeaway.
+`LessonsTest` runs all 34 snippets and checks each for the text that makes
+its point, such as "Invalid date 'FEBRUARY 30'", "lasted 25 hours" or
+"+38.5 µs".
+- **Deterministic wherever possible:** the examples use fixed dates and
+  explicit zones and locales. The deliberate exceptions are the default-zone
+  examples (lesson 2) and "today" (lesson 14), whose assertions avoid the
+  variable parts.
+- **The threads race (lesson 5)** is nondeterministic by nature. Only the
+  fixed side's zero errors are asserted.
+
+**Physics, checked.** Lesson 17 computes the relativistic rates from first
+principles. The orbital speed is √(GM/r). Special relativity gives
+−v²/2c², and general relativity GM/c²·(1/R⊕ − 1/r). That's −7.2, +45.7
+and net +38.5 µs a day, matching the published figures. The fix uses the
+IS-GPS-200 fractional offset, 4.4647×10⁻¹⁰, giving the 10.22999999543 MHz
+set before launch. The "about 12 km a day" is the net rate times *c*, the
+usual way the effect is quoted.
+
+**Presenting.**
+- **Keys:** Page Up and Page Down are what presentation clickers send, so
+  they're bound at `WHEN_ANCESTOR_OF_FOCUSED_COMPONENT`. They're removed
+  from the code and output panes' input maps, so a clicker press still
+  changes lessons when the focus is in the code. Arrow keys work outside
+  text.
+- **Presenter mode** rescales fonts from the theme's base size, rather
+  than compounding, so it can be toggled any number of times.
+- **Layout:** the two examples switch between side by side and stacked at
+  1,050 pixels. Below the height two usable examples need, the lesson
+  panel stops tracking the viewport height (`Scrollable`) and scrolls.
+  Before that change, the code areas shrank to nothing at 1000×640.
+- **Output:** after a run, the output pane grows to fit what was printed,
+  up to 60% of the example.
+- **Under the hood** starts collapsed in this plugin. The examples are the
+  point of a talk, and the remembered state keeps it open for anyone who
+  opens it.
+
+**Joda-Time 2.14.4**, not 2.15.0: when this was written, 2.15.0 was nine
+days old, and the project uses versions that have had a few weeks in the
+wild.
+
+---
+
 ## 7. Testing strategy
 
-**255 tests**, all run by `./gradlew build`.
+**299 tests**, all run by `./gradlew build`.
 
 ### Headless first
 
@@ -1335,6 +1425,7 @@ static void requireDisplay() {
 | running dig | `echo` and `sleep` in place of dig (`DigRunnerTest`), and real dig output saved as fixtures (`DigOutputTest`) |
 | exercising git | a real temporary repository built by the test (`GitIntegrationTest`): every preset, the commit-to-tree-to-blob walk, the index-unchanged check, the refused `--output` injection, and a branch-and-merge history parsed for the graph |
 | checking the graph layout | `CommitGraphTest` asserts lanes and line segments for small hand-written histories, with no painting |
+| presenting the time talk | `LessonsTest` compiles and runs every example and checks each for the text that makes its point; `SnippetRunnerTest` covers compile errors, warnings, exceptions, imports and the time limit |
 | calling Claude | a local fake Messages API serving server-sent events (`ClaudeAssistantTest`), and stand-in assistants (`DigExplainPanelTest`) |
 
 ### Regression tests pin every bug found
@@ -1353,6 +1444,7 @@ static void requireDisplay() {
   left)
 - tag refs from `for-each-ref` (`refs/tags/…`) not recognised as tags
 - empty git output giving no feedback (`GitPreset.note`)
+- snippet line numbers off by one in compile errors and stack traces
 
 ### Visual verification
 
@@ -1368,6 +1460,8 @@ several problems the unit tests couldn't:
 - "Under the hood" squeezing the Git Browser's output to about 76 pixels
   at an ordinary window size
 - faint seams between the graph's rows, from anti-aliasing at cell edges
+- the Time in Java examples squeezed to nothing at 1000×640, and presenter
+  mode leaving the buttons small
 
 The same harness also reproduced a user report. Launched the way
 `gradlew run` does (from `dframework-demo/`) and at the user's 1000×640
@@ -1423,6 +1517,11 @@ The user's own audit log showed which steps they had taken.
   plugins needing different versions of the same library would conflict.
 - **The Git Browser reads; it never writes,** so it can't fetch, check
   out or commit. That's deliberate.
+- **Time in Java needs a JDK.** On a bare runtime there's no compiler, so
+  the lessons show but can't run. A snippet that never ends is abandoned
+  after 15 seconds but can't be stopped, so it keeps one core busy until
+  the application exits. Snippets run with the application's full
+  permissions; they are the presenter's own code.
 - **The commit graph draws at most *Limit* commits** (500 by default).
   Older history shows as lines running off the bottom. Lanes in the middle
   aren't compacted, and a very wide history is clipped at 320 pixels.
