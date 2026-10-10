@@ -1,0 +1,51 @@
+
+; <<>> DiG 9.18.39-0ubuntu0.24.04.7-Ubuntu <<>> +trace example.com A
+;; global options: +cmd
+.			68739	IN	NS	m.root-servers.net.
+.			68739	IN	NS	f.root-servers.net.
+.			68739	IN	NS	d.root-servers.net.
+.			68739	IN	NS	j.root-servers.net.
+.			68739	IN	NS	h.root-servers.net.
+.			68739	IN	NS	k.root-servers.net.
+.			68739	IN	NS	c.root-servers.net.
+.			68739	IN	NS	e.root-servers.net.
+.			68739	IN	NS	i.root-servers.net.
+.			68739	IN	NS	b.root-servers.net.
+.			68739	IN	NS	a.root-servers.net.
+.			68739	IN	NS	l.root-servers.net.
+.			68739	IN	NS	g.root-servers.net.
+;; Received 239 bytes from 127.0.0.53#53(127.0.0.53) in 7 ms
+
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			86400	IN	DS	19718 13 2 8ACBB0CD28F41250A80A491389424D341522D946B0DA0C0291F2D3D7 71D7805A
+com.			86400	IN	RRSIG	DS 8 1 86400 20261023170000 20261010160000 8763 . EvCmdwDkDPq0fNsirXUQHa1Ga0yOKBLlB4ga8wTD+NuJfF6AT9RenChe 5Gp9uUZcW4eukhFjGyZ4YnxZZaUrQwkpIcIuB6q5EjS0S39sx0bsRrir AZW/ARCzQ8zyJ5rcHz1U66h9kC5En1lcqCg7A+DzVh9SPcpDuCLm9vEO ylYWdYol6PGXq995j9rReEe0belqgWY+P5R6EZ0K/VGGG9CRl0mppXwa V3TCPmZwVmN+x1hN9vZTDzGXZE5QPlMVK2Pse5FV3v7hzrAfpPXho2vm tShHhF8EB+nGWFQH2wIfmfLxUWjPhJs/WwNKLQU2eZ1T17ky7+LoPPI4 Ua1CKQ==
+;; Received 1199 bytes from 192.36.148.17#53(i.root-servers.net) in 3 ms
+
+example.com.		172800	IN	NS	hera.ns.cloudflare.com.
+example.com.		172800	IN	NS	elliott.ns.cloudflare.com.
+example.com.		86400	IN	DS	2371 13 2 C988EC423E3880EB8DD8A46FE06CA230EE23F35B578D64E78B29C3E1 C83D245A
+example.com.		86400	IN	RRSIG	DS 13 2 86400 20261016013324 20261009002324 41446 com. b9wOTPJvx1bqDtkCQifXGNMvPbtXCeSutL8FtW/oUviu0m1nMEssLlSz NN6Nco4XgC1hz4LmA3HaUL0nERnhVA==
+;; Received 506 bytes from 192.5.6.30#53(a.gtld-servers.net) in 4 ms
+
+;; UDP setup with 2a06:98c1:50::ac40:23e4#53(2a06:98c1:50::ac40:23e4) for example.com failed: network unreachable.
+;; no servers could be reached
+;; UDP setup with 2a06:98c1:50::ac40:23e4#53(2a06:98c1:50::ac40:23e4) for example.com failed: network unreachable.
+;; no servers could be reached
+;; UDP setup with 2a06:98c1:50::ac40:23e4#53(2a06:98c1:50::ac40:23e4) for example.com failed: network unreachable.
+example.com.		300	IN	A	104.20.23.154
+example.com.		300	IN	A	172.66.147.243
+example.com.		300	IN	RRSIG	A 13 2 300 20261011210639 20261009190639 34505 example.com. bmRHRcBoYTiDe8D3DSlth2FUoU7jedE+j53qWEAdn7peqLDCsQ//QY0s SAANGBYDAVA/Q24UE+V/pvU9F3EE8g==
+;; Received 179 bytes from 108.162.192.162#53(hera.ns.cloudflare.com) in 4 ms
+

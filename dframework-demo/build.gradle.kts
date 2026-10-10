@@ -9,6 +9,8 @@ dependencies {
     implementation(project(":dframework-swing"))
     // Kunststoff (2004) is not published to Maven Central, so it is vendored in libs/.
     runtimeOnly(files("$rootDir/libs/kunststoff.jar"))
+    // Plugins are found at runtime through ServiceLoader; the demo's code never refers to them.
+    runtimeOnly(project(":dframework-dig"))
 }
 
 // The User Guide's examples are compiled by a test, so it must re-run when the guide changes.

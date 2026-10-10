@@ -32,6 +32,8 @@ import com.dframework.swing.nav.DBreadcrumbBar;
 import com.dframework.swing.nav.DBreadcrumbBar.Crumb;
 import com.dframework.swing.nav.DOutlookBar;
 import com.dframework.swing.notify.DToast;
+import com.dframework.swing.plugin.DPluginHost;
+import com.dframework.swing.plugin.DPluginPane;
 import com.dframework.swing.theme.DTheme;
 import com.dframework.swing.theme.ThemeManager;
 import com.dframework.swing.util.DResources;
@@ -95,6 +97,7 @@ public final class DemoApp {
                 .rememberBounds("dframework.demo.main")
                 .build();
         DCommandPalette palette = DCommandPalette.install(frame).addOutlookBar(nav);
+        installPlugins(nav, screens, cards);
         palette.addCommands(windowCommands(frame));
         frame.setJMenuBar(menuBar(frame, nav, palette));
         frame.setVisible(true);
@@ -165,6 +168,20 @@ public final class DemoApp {
 
     private static Icon icon(String name) {
         return DResources.load(ICONS + name).orElseThrow();
+    }
+
+    /**
+     * Adds every plugin on the classpath (such as DNS Dig, from the dframework-dig
+     * jar) to the Outlook bar. Nothing here names a plugin: dropping another plugin
+     * jar on the classpath is enough for it to appear.
+     */
+    private static void installPlugins(DOutlookBar nav, JPanel screens, CardLayout cards) {
+        DPluginHost host = new DPluginHost();
+        List<DPluginPane> panes = host.addToOutlookBar(nav, DPluginHost.discover(),
+                pane -> cards.show(screens, "plugin:" + pane.getPlugin().id()));
+        panes.forEach(pane -> screens.add(pane, "plugin:" + pane.getPlugin().id()));
+        // Stop plugins' background work (such as a running dig) when the application exits.
+        Runtime.getRuntime().addShutdownHook(new Thread(host::disposeAll, "dframework-plugin-shutdown"));
     }
 
     /** Extra commands that exist only in the palette. */

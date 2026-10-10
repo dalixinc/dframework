@@ -43,9 +43,13 @@ containing a sortable, searchable table with a live row count.
 13. [Notifications: `DToast`](#13-notifications-dtoast)
 14. [Switches: `DToggleSwitch`](#14-switches-dtoggleswitch)
 15. [Background work: `DBusyPanel`](#15-background-work-dbusypanel)
-16. [Resources: `DResources`](#16-resources-dresources)
-17. [Putting it together](#17-putting-it-together)
-18. [Tips, rules and FAQ](#18-tips-rules-and-faq)
+16. [Collapsible sections: `DCollapsiblePane`](#16-collapsible-sections-dcollapsiblepane)
+17. [The audit log: `AuditLog`](#17-the-audit-log-auditlog)
+18. [Plugins: `DPlugin` and `DPluginHost`](#18-plugins-dplugin-and-dpluginhost)
+19. [The DNS Dig plugin](#19-the-dns-dig-plugin)
+20. [Resources: `DResources`](#20-resources-dresources)
+21. [Putting it together](#21-putting-it-together)
+22. [Tips, rules and FAQ](#22-tips-rules-and-faq)
 
 ---
 
@@ -143,6 +147,7 @@ Run it and try closing the window. You'll be asked first.
 | **Tracker 2** | My Calls | The call log pre-filtered to `engineer:dale -closed`. **Refresh** shows a cancellable progress ring; double-click a call to drill in |
 | | Log Call, Open Call, Time Sheet | Placeholders honouring the 2005 VB6 original |
 | **Admin** | Users, Settings, Backup, About | Placeholders, and an About box with a spinning sign |
+| **Plugins** | DNS Dig | A plugin found at runtime: run `dig` lookups, see the parsed answers, and see exactly which command runs |
 
 Things to try:
 
@@ -602,7 +607,9 @@ frame.add(bar, BorderLayout.WEST);
   to the bottom of the bar.
 - Items show as large icons with captions underneath. They highlight on
   hover, and the selected one stays highlighted.
-- Long groups scroll.
+- When a group has more items than fit, it scrolls, with up and down arrows
+  on the scroll bar. The bar reserves room for the scroll bar, so items
+  aren't squeezed, and tabbing to an item scrolls it into view.
 
 ```java
 bar.setSelectedItem(item);     // as if clicked: opens its group and runs its action
@@ -841,7 +848,187 @@ appearing, so quick jobs don't flash it.
 
 ---
 
-## 16. Resources: `DResources`
+## 16. Collapsible sections: `DCollapsiblePane`
+
+A titled section whose content folds away when the header is clicked, for
+detail that some users want and others don't:
+
+```java
+DCollapsiblePane details = new DCollapsiblePane("Under the hood", commandPanel);
+details.rememberState(Preferences.userRoot().node("myapp"), "underTheHood");   // reopen as left
+details.setExpanded(false);
+details.addPropertyChangeListener(DCollapsiblePane.EXPANDED_PROPERTY, e -> updateTitle());
+```
+
+The header shows ▾ when open and ▸ when closed. It works from the keyboard
+(<kbd>Space</kbd>) and tells screen readers whether the section is open.
+
+---
+
+## 17. The audit log: `AuditLog`
+
+An append-only record of what an application did: one JSON line per
+action, with time, user, source and details.
+
+```java
+AuditLog.getDefault().record("tracker2", "export",
+        Map.of("file", "calls.csv", "rows", 300));
+```
+
+```json
+{"time":"2026-10-10T19:04:12+01:00","user":"dale","source":"tracker2","action":"export","file":"calls.csv","rows":"300"}
+```
+
+- The default file is `~/.dframework/audit.log`. Move it with
+  `-Ddframework.audit.file=/path/to/audit.log` or `AuditLog.setDefault(...)`.
+- New log files are readable by their owner only, because commands can
+  contain sensitive details.
+- If the file can't be written, entries are kept in memory and a warning is
+  logged. Auditing never stops the application.
+- `recent()` and `recent(source)` return this session's entries.
+  `addListener(...)` is called for each new one, which is how DNS Dig's
+  history table stays current.
+- `AuditLog.inMemory()` gives a log with no file, useful in tests.
+
+---
+
+## 18. Plugins: `DPlugin` and `DPluginHost`
+
+A plugin is a self-contained application that a DFramework program can
+display, much as ActiveX controls once let applications embed each other.
+The host knows only the `DPlugin` interface; the plugin brings its own
+screen and behaviour.
+
+### Writing a plugin
+
+```java
+public final class HelloPlugin implements DPlugin {
+
+    @Override
+    public String id() {
+        return "com.example.hello";          // stable: names its settings and audit records
+    }
+
+    @Override
+    public String name() {
+        return "Hello";
+    }
+
+    @Override
+    public String description() {
+        return "A minimal plugin.";
+    }
+
+    @Override
+    public JComponent createView(PluginContext context) {
+        JButton wave = new JButton("Wave");
+        wave.addActionListener(e -> {
+            context.audit("wave", Map.of("times", 1));      // recorded with this plugin as the source
+            DToast.success(context.component(), "Hello!");
+        });
+        context.addCommand(Command.of("Hello", "Wave", wave::doClick));   // into the command palette
+        return wave;
+    }
+}
+```
+
+Then register it, so hosts can find it, in a file in the plugin's jar:
+
+```
+META-INF/services/com.dframework.swing.plugin.DPlugin
+```
+
+containing the class name, `com.example.hello.HelloPlugin`.
+
+Optional extras: `icon()` (ideally 32×32), `category()` (the navigation
+group; default "Plugins"), and `onShow()`, `onHide()` and `dispose()` for
+the plugin's lifecycle.
+
+### What a plugin gets: `PluginContext`
+
+| Method | Gives |
+|---|---|
+| `component()` | the hosting pane, as the owner for dialogs and toasts |
+| `audit(action, details)` | an audit entry with the plugin's id as the source |
+| `preferences()` | the plugin's own saved settings, kept between runs |
+| `addCommand(command)` | a command in the window's palette |
+
+### Hosting plugins
+
+```java
+DPluginHost host = new DPluginHost();
+List<DPluginPane> panes = host.addToOutlookBar(nav, DPluginHost.discover(),
+        pane -> cards.show(screens, pane.getPlugin().id()));
+panes.forEach(pane -> screens.add(pane, pane.getPlugin().id()));
+Runtime.getRuntime().addShutdownHook(new Thread(host::disposeAll));
+```
+
+- `DPluginHost.discover()` finds every plugin on the classpath. Adding a
+  plugin jar is all it takes; the host's code never names it.
+- `addToOutlookBar` puts each plugin in the bar group named by its category.
+  Or call `host.mount(plugin)` yourself, which returns a `DPluginPane`.
+- **Plugins start only when first opened**, so unused ones cost nothing.
+- **A plugin that crashes on start-up shows its error** in its own pane. The
+  rest of the application carries on, and a jar that can't be loaded at all
+  is skipped and logged.
+- `disposeAll()` shuts plugins down on exit, so they can stop background
+  work such as a running process.
+
+> Plugins run with the same permissions as the host application, as ActiveX
+> controls did. Only install plugins you trust.
+
+---
+
+## 19. The DNS Dig plugin
+
+DNS Dig (the `dframework-dig` module) is both a real tool and a worked
+example of a plugin. It runs the standard `dig` command and explains what
+it's doing.
+
+**The form**
+- **Name**, **Type** (A, AAAA, MX, NS, TXT, CNAME, SOA, CAA, SRV, PTR, DS,
+  DNSKEY, ANY) and **Server**, which is blank for your system's resolver.
+  The ▾ button offers Cloudflare, Google, Quad9 and OpenDNS.
+- **Switches:** Short (`+short`), Trace (`+trace`), DNSSEC (`+dnssec`),
+  TCP (`+tcp`), Answer only (`+noall +answer`), No recursion (`+norecurse`)
+  and Reverse (`-x`, which takes an IP address).
+- **Timeout** in seconds (`+time=`).
+- <kbd>Enter</kbd> or **Dig** runs the lookup, and **Stop** cancels it.
+
+**The results**
+- **Status line:** for example
+  `NOERROR · 5 answers · 6 ms · asked 1.1.1.1 over UDP · 161 bytes`. Green
+  means NOERROR, amber NXDOMAIN, and red a failure.
+- **Answers:** a searchable table of the records returned. With Trace on,
+  records are grouped by the server that returned them
+  (`Hop 2 · a.root-servers.net (20 ms)`).
+- **Raw output:** dig's own text, shown as it arrives.
+
+**Under the hood** (collapsible, and it stays closed if you close it)
+- **The exact command** that runs when you press Dig. It updates as you
+  change the form, and **Copy** puts it on the clipboard to paste into a
+  terminal.
+- **Every command run this session**, with time, result and duration.
+- **Where the audit log is.** Every lookup is recorded there, with the
+  command, the server, the result and how long it took.
+
+**Safety**
+- dig runs **without a shell**, so nothing typed into the form can run a
+  different command.
+- A name or server can't start with `-`, `+` or `@`, which dig would read
+  as its own options. For example, `-f /etc/passwd` would make dig read a
+  local file. That text is blocked as you type.
+
+If `dig` isn't installed, the plugin says how to install it
+(`sudo apt install bind9-dnsutils` on Debian or Ubuntu) and still shows the
+commands it would run.
+
+To use DNS Dig in your own application, put `dframework-dig` on the runtime
+classpath and host plugins as shown in [chapter 18](#18-plugins-dplugin-and-dpluginhost).
+
+---
+
+## 20. Resources: `DResources`
 
 Icons and text load from the **classpath**, so they work the same from an
 IDE, a jar or an installer:
@@ -858,7 +1045,7 @@ DFramework's own text, such as dialog titles and validation messages, is in
 
 ---
 
-## 17. Putting it together
+## 21. Putting it together
 
 A small but complete application using most of the framework:
 
@@ -918,7 +1105,7 @@ public final class Tracker {
 
 ---
 
-## 18. Tips, rules and FAQ
+## 22. Tips, rules and FAQ
 
 **Do I have to use the Swing event thread?**
 Yes, as with all Swing: create and change components on the event dispatch
@@ -953,6 +1140,11 @@ reach the application, press F1 instead, or choose your own keys with
 GNOME doesn't show window icons in its title bars. Use
 `lafDecorated(true)` with a FlatLaf theme to get a themed title bar that
 does.
+
+**Where is the audit log?**
+`~/.dframework/audit.log` unless you move it (see [chapter 17](#17-the-audit-log-auditlog)).
+Each line is one JSON record, so it reads easily with `jq`, for example
+`jq 'select(.source == "com.dframework.dig")' ~/.dframework/audit.log`.
 
 **How do I translate DFramework's messages?**
 Add `com/dframework/swing/messages_<lang>.properties` to your classpath

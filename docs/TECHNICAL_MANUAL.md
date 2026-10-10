@@ -129,8 +129,10 @@ its own popup windows, and transparency is unreliable.
 ```mermaid
 graph LR
     demo["dframework-demo<br/><i>showcase application</i>"] --> swing["dframework-swing<br/><i>the library</i>"]
+    dig["dframework-dig<br/><i>DNS Dig plugin</i>"] --> swing
     swing --> flatlaf["FlatLaf 3.7.2"]
     demo -. runtime .-> kunst["libs/kunststoff.jar"]
+    demo -. "runtime (ServiceLoader)" .-> dig
     buildSrc["buildSrc<br/><i>dframework.java-conventions</i>"] -. configures .-> swing
     buildSrc -. configures .-> demo
 ```
@@ -139,6 +141,7 @@ graph LR
 |---|---|
 | `dframework-swing` | The library, published as `com.dframework:dframework-swing` |
 | `dframework-demo` | The showcase (`./gradlew :dframework-demo:run`). It's also the integration test bed: every component is used here as an application would use it |
+| `dframework-dig` | The DNS Dig plugin. It depends on the library; the demo has it only on its *runtime* classpath and finds it through `ServiceLoader`, which proves the plugin mechanism end to end |
 | `buildSrc` | One convention plugin shared by every module |
 
 ### Packages (`com.dframework.swing`)
@@ -156,6 +159,9 @@ graph LR
 | `notify` | `DToast` |
 | `button` | `DToggleSwitch` |
 | `busy` | `DBusyPanel` |
+| `panel` | `DCollapsiblePane` |
+| `audit` | `AuditLog` |
+| `plugin` | `DPlugin`, `PluginContext`, `DPluginPane`, `DPluginHost` |
 | `util` | `DResources` |
 
 Resources live under `com/dframework/swing/`:
@@ -169,6 +175,7 @@ Most components stand alone. The deliberate couplings are:
 - `DFrame` → `ConfirmCloser`, `WindowMemory`, `DResources`
 - `DCommandPalette` → `DOutlookBar`, for `addOutlookBar`
 - `DTablePanel` → `DTable`, `DSearchField`
+- `DPluginHost` → `DOutlookBar` (for `addToOutlookBar`), `DCommandPalette` (for `PluginContext.addCommand`) and `AuditLog`
 - `MessageIcons` affects `ConfirmCloser` indirectly, because both go
   through `JOptionPane`
 
@@ -613,6 +620,21 @@ than a custom layout manager.
 - **Scrolling:** the item list implements `Scrollable`, tracking the
   viewport width, so it never scrolls sideways.
 
+**Scrolling.** Overflowing groups always scrolled, but the first version's
+scroll bar was easy to miss. FlatLaf draws a thin, pale bar that nearly
+vanished against the bar's background, and `JScrollPane` leaves the
+scroll bar out of its preferred width unless the bar is forced on, so the
+item column was squeezed when it appeared. Now:
+
+- Each group's scroll pane (`ItemScroller`) adds the scroll bar's width to
+  its preferred width, so the bar's width is stable.
+- The scroll bar shows arrow buttons and is a little wider (FlatLaf client
+  properties).
+- On a custom content background, its track and thumb are shades of that
+  background.
+- A focus listener on each item calls `scrollRectToVisible`, so Tab brings
+  hidden items into view.
+
 **Colours.** `null` means "derive from the theme", computed when painting,
 so theme changes need no listener. The classic palette, `#ACA899` content,
 `#ECE9D8` headers and white captions, was colour-picked from the 2005
@@ -838,11 +860,162 @@ back.
 - **Indicators:** 12 spokes fading behind a rotating head when progress
   is unknown, or a ring sweeping 3.6° per percent with the number inside.
 
+### 6.16 `DCollapsiblePane`
+
+- **The header is a real `JButton`.** That gives keyboard operation and
+  focus for free. Its accessible description says "Expanded" or
+  "Collapsed", and the ▾ / ▸ arrow is part of the button text rather than a
+  separate icon, so it follows the theme's font and colour.
+- **Hiding:** collapsing just hides the content component, then
+  revalidates.
+- **Remembering:** `rememberState(node, key)` restores first, then starts
+  saving, so restoring doesn't write back the value it has just read.
+
+### 6.17 `AuditLog`
+
+**Format.** One JSON object per line ("JSON Lines").
+- **Easy to work with:** it appends safely, survives a crash mid-write with
+  at most one damaged line, and works with `grep` and `jq`.
+- **Values are always strings:** details are converted with `String.valueOf`,
+  so the format never depends on how a number happens to be represented.
+- **No library:** fields are written in insertion order by a small escaper
+  that handles quotes, backslashes and control characters.
+
+**Writing.**
+- **Per entry:** each entry opens the file, appends and closes it, under a
+  lock. That's simple and robust, and fast enough for user-driven actions.
+  It isn't intended for high-volume logging.
+- **Permissions:** new files are created `rw-------` where the file system
+  supports POSIX permissions, because commands can contain sensitive
+  information.
+- **On failure:** if writing fails, the first error is logged once, entries
+  are still kept in memory, and the call returns normally. **Auditing must
+  never break the action being audited.**
+
+**In memory.** The last 500 entries are kept in memory (`recent()`), and
+listeners are called on the recording thread. That's how DNS Dig's history
+table updates live: it marshals onto the EDT itself.
+
+### 6.18 The plugin framework
+
+**Discovery: `java.util.ServiceLoader`.** It's the JDK's standard plugin
+mechanism. A jar declares implementations in
+`META-INF/services/com.dframework.swing.plugin.DPlugin`, and hosts find them
+with no configuration and no dependency on the plugin. That's the modern
+equivalent of registering an ActiveX control.
+
+- **One bad plugin can't stop the rest.** `discover()` iterates
+  `ServiceLoader.stream()` and instantiates each provider inside its own
+  `try`, so one broken jar (`ServiceConfigurationError`, a missing class,
+  an exception in a constructor) is logged and skipped.
+- **Ordering:** the results are sorted by category, then name.
+
+**Lazy start-up.**
+- **When:** `DPluginPane` creates the plugin's view on the first
+  `SHOWING_CHANGED` hierarchy event that leaves it showing, or on an
+  explicit `start()`.
+- **Why:** a card layout adds every pane at once, so creating views at
+  mount time would start every plugin on launch.
+- **After start:** the same listener drives `onShow` and `onHide`.
+
+**Containing failures.**
+- **On start-up:** `createView` runs inside a `try`. A
+  `RuntimeException` or `LinkageError` (a plugin built against a missing
+  class, say) is logged, audited as `start-failed`, and replaced by an
+  error panel in the plugin's pane.
+- **Later on:** exceptions from `onShow`, `onHide` and `dispose` are
+  logged and swallowed.
+
+**Context.**
+- **What it provides:** `PluginContext` is the plugin's only route to host
+  services: audit, settings, palette commands, and the owner component.
+  Keeping it small means plugins don't depend on the host's internals.
+- **Settings:** each plugin gets `preferences()` under the host's settings
+  root, at `<root>/<plugin id>`. That's why ids are validated (no `/`).
+- **For tests:** the host constructor accepts the root, so tests can use a
+  throwaway node.
+
+**Trust.** Plugins run in the host's class loader with the host's
+permissions, exactly like ActiveX controls. There's no sandbox, and
+documentation says so. Separate class loaders, for unloading plugins or
+isolating their dependencies, are a possible future step
+([§10](#10-roadmap)).
+
+### 6.19 DNS Dig (`dframework-dig`)
+
+**Layering.** The plugin is split so nearly all of its logic is testable
+without a user interface, a network or dig itself:
+
+| Class | Role | Tested by |
+|---|---|---|
+| `DigOptions` | the form's state as an immutable record | — |
+| `DigCommand` | options → argument list; argument list → display text | `DigCommandTest` |
+| `DigInput` | input filters and validators | `DigInputTest` |
+| `DigOutput` | dig's text → records and a summary | `DigOutputTest`, against real captured output |
+| `DigRunner` | runs a process, streams lines, cancels | `DigRunnerTest`, using `echo` and `sleep` in place of dig |
+| `DigView`, `DigPlugin` | user interface and plugin glue | `DigPluginTest` (discovery, view creation) and the end-to-end run |
+
+**Running commands safely.** Two separate defences:
+
+1. **No shell.** `ProcessBuilder` gets the argument list directly. Shell
+   metacharacters (`;`, `$( )`, `*`) are inert, and `DigRunnerTest` proves
+   it by passing them to `echo`.
+2. **No option injection.** Even without a shell, a "name" starting with
+   `-`, `+` or `@` would be read by dig as one of its own options. For
+   example, `-f /etc/passwd` makes dig read queries from a local file. The
+   input filters block such text as it's typed (a negative lookahead,
+   `(?![-+@])`), and the validators reject it if it arrives any other way.
+
+The *displayed* command shell-quotes anything a shell would interpret, so
+what the user copies and pastes runs exactly what DNS Dig ran.
+
+**Command order** is fixed: server, name, type (or `-x` and the address),
+flags in declaration order, then `+time=` if it isn't dig's default of 5.
+The preview therefore doesn't jump about as switches are toggled.
+`+noall +answer` is dropped when `+short` is on, since it would add nothing.
+
+**Parsing dig's output.** dig's text format isn't a stable interface, so
+the parser is lenient and was tested against real dig 9.18 captures:
+
+- **Sections** come from the `;; X SECTION:` headers.
+- **Record lines** are any non-comment line of five or more fields where
+  field 2 is a number (the TTL) and field 3 is a DNS class.
+- **`+trace`** prints no section headers. Records are held until the
+  `;; Received N bytes from S#53(name) in T ms` line that follows them, and
+  then labelled `Hop k · name (T ms)`. The answers are the last hop's
+  records.
+- **`+short`** prints only data, so each line becomes a record with the
+  queried name and type.
+- **Warnings:** lines mentioning failures or timeouts are collected as
+  "problems", shown as warnings in the status line rather than lost. The
+  real trace capture contains IPv6 "network unreachable" lines, and a test
+  pins their handling.
+
+Capturing real output corrected an assumption on the first day. A made-up
+"non-existent" name under `example.com` returned **NOERROR**, not
+NXDOMAIN, because that zone answers for names that don't exist. The
+NXDOMAIN fixture now uses a top-level domain that doesn't exist.
+
+**Process handling.**
+- **Running:** standard error is merged into standard output, so error
+  messages appear in order in the Raw output. Standard input is closed
+  immediately.
+- **Cancelling:** sends `destroy()`, then `destroyForcibly()` after two
+  seconds.
+- **On exit:** the demo's shutdown hook calls `DPluginHost.disposeAll()`,
+  so a lookup still running when the application exits is stopped instead
+  of being left behind as an orphan process.
+
+**Audit.** Every run is recorded as `action: "run"`, with the displayed
+command, the name, type and server, the outcome (`ok`, `failed`,
+`cancelled` or `error`), the exit code, the duration, the DNS status, and
+the record and line counts. Plugin start and stop are recorded by the host.
+
 ---
 
 ## 7. Testing strategy
 
-**151 tests**, all run by `./gradlew build`.
+**195 tests**, all run by `./gradlew build`.
 
 ### Headless first
 
@@ -867,6 +1040,13 @@ static void requireDisplay() {
 - **Preferences:** `WindowMemoryTest` uses a random throwaway node and
   removes it afterwards, *including* any empty parent nodes, so the
   developer's preferences aren't littered.
+- **Settings never touch the user's own.** One plugin test first cleaned up
+  by deleting the dig plugin's *real* settings node, which would have wiped
+  a user's saved options whenever the tests ran. It was caught in review.
+  `DPluginHost` now accepts a settings root, and the test passes a
+  throwaway node. Likewise, end-to-end runs pass
+  `-Ddframework.audit.file=<scratch file>` so they never write to the real
+  audit log.
 - **Global UI state:** tests that change it (look and feel, `MessageIcons`,
   `DToast` animation, default icons) restore it in `@AfterEach`.
 
@@ -879,6 +1059,8 @@ static void requireDisplay() {
 | waiting for the debounce | `setSearchDelay(0)` |
 | typing keys | insert into the `Document` (the same path as typing) |
 | reading the palette UI | package-private `search()`, `setQuery()` and `runSelected()` |
+| finding plugins | a test `META-INF/services` file registering a working plugin and one that throws on start-up |
+| running dig | `echo` and `sleep` in place of dig (`DigRunnerTest`), and real dig output saved as fixtures (`DigOutputTest`) |
 
 ### Regression tests pin every bug found
 
@@ -948,6 +1130,15 @@ several problems the unit tests couldn't:
 - **Kunststoff's licence** is believed to be LGPL, which permits
   redistribution, but this hasn't been verified against the original
   distribution.
+- **Plugins are trusted code.** They share the host's class loader and
+  permissions, with no sandbox. They also can't be unloaded, and two
+  plugins needing different versions of the same library would conflict.
+- **DNS Dig depends on dig's text output**, which isn't a formal
+  interface. The parser is lenient and tested against dig 9.18; other
+  major versions may need new fixtures.
+- **The audit log never rotates.** It grows until someone archives it.
+  Rotation, or handing records to the platform's logging, is a possible
+  addition.
 - **Validator and input-filter messages** are English only. The bundle
   is ready for translations.
 
@@ -967,6 +1158,14 @@ several problems the unit tests couldn't:
 3. **First FX components:** the Stage equivalent of `DFrame` (icons,
    confirm-close, remembered bounds, themes), then the text field and
    toasts.
+
+**Plugins:**
+- a plugin manager screen listing what's installed, with versions and
+  failures
+- an optional separate class loader per plugin directory, so plugins can be
+  unloaded and their dependencies isolated
+- more plugins, written the same way as DNS Dig (ping, traceroute, certificate
+  inspection)
 
 **Other possible additions:**
 - a `DToast` history panel

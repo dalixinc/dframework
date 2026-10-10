@@ -30,6 +30,7 @@ build (`UserGuideExamplesTest`), so they can't drift from the API.
 |---|---|
 | `dframework-swing` | The library (`com.dframework.swing`) |
 | `dframework-demo` | Showcase app: Outlook-bar navigation, live theme switcher, validated fields |
+| `dframework-dig` | **DNS Dig**, a plugin: run `dig` lookups and see exactly what runs |
 
 A JavaFX module is planned.
 
@@ -146,6 +147,15 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
           .addOutlookBar(nav)                                  // "Go to" every screen
           .addCommand(Command.of("Data", "Refresh", this::refresh));
   ```
+- **Plugins** (`DPlugin`, `DPluginHost`): self-contained apps that a host
+  finds on the classpath and displays, in the spirit of ActiveX controls.
+  Each starts only when first opened, a plugin that fails is contained in
+  its own pane, and each gets its own saved settings and audit records.
+  **DNS Dig** is the first.
+- **`AuditLog`**: an append-only JSON Lines record of what the application
+  did, in `~/.dframework/audit.log`, readable by its owner only.
+- **`DCollapsiblePane`**: a titled section that folds away and remembers
+  whether it was open.
 - **`ConfirmCloser`**: an "are you sure?" prompt that works as both a
   `WindowListener` and an `ActionListener`, so the close button and a
   *File → Exit* menu item ask the same question.
