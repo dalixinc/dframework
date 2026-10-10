@@ -67,7 +67,7 @@ public final class DemoApp {
     private static void createAndShow() {
         JLabel status = new JLabel();
         status.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-        String hint = "      Press Ctrl+Shift+P for the command palette";
+        String hint = "      Press Ctrl+Shift+P or F1 for the command palette";
         ThemeManager.addThemeListener(theme -> status.setText("Theme: " + theme.displayName() + hint));
         ThemeManager.current().ifPresent(theme -> status.setText("Theme: " + theme.displayName() + hint));
 

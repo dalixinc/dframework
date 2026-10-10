@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
+import javax.swing.JInternalFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -75,6 +76,64 @@ class DCommandPaletteTest {
         Object key = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(DCommandPalette.DEFAULT_KEY_STROKE);
         assertThat(key).isNotNull();
         assertThat(root.getActionMap().get(key)).isNotNull();
+    }
+
+    @Test
+    void defaultsToCtrlShiftPAndF1() throws Exception {
+        // A JInternalFrame is a RootPaneContainer that works headless, so this uses the real default install.
+        JInternalFrame internal = new JInternalFrame();
+        JRootPane window = internal.getRootPane();
+        DCommandPalette fresh = onEdt(() -> DCommandPalette.install(internal));
+
+        assertThat(fresh.getKeyStrokes()).containsExactlyElementsOf(DCommandPalette.DEFAULT_KEY_STROKES);
+        assertThat(toggle(window, KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0)).accept(window)).isTrue();
+        assertThat(toggle(window, DCommandPalette.DEFAULT_KEY_STROKE).accept(window)).isTrue();
+    }
+
+    @Test
+    void shortcutStepsAsideForAMenuItemUsingTheSameKey() throws Exception {
+        KeyStroke f1 = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
+        JMenuItem help = item("Help Contents");
+        help.setAccelerator(f1);
+        root.getJMenuBar().getMenu(0).add(help);
+        palette.setKeyStrokes(DCommandPalette.DEFAULT_KEY_STROKE, f1);
+
+        // Declining leaves F1 unconsumed, so Swing gives it to the Help menu item instead.
+        assertThat(toggle(root, f1).accept(root)).isFalse();
+        assertThat(toggle(root, DCommandPalette.DEFAULT_KEY_STROKE).accept(root)).isTrue();
+
+        help.setEnabled(false);
+        assertThat(toggle(root, f1).accept(root)).as("a disabled item doesn't claim the key").isTrue();
+    }
+
+    @Test
+    void anyShortcutClosesThePaletteOnceOpen() throws Exception {
+        KeyStroke f1 = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
+        JMenuItem help = item("Help Contents");
+        help.setAccelerator(f1);
+        root.getJMenuBar().getMenu(0).add(help);
+        palette.setKeyStrokes(DCommandPalette.DEFAULT_KEY_STROKE, f1);
+        SwingUtilities.invokeAndWait(palette::open);
+
+        assertThat(toggle(root, f1).accept(root)).isTrue();
+        SwingUtilities.invokeAndWait(() -> toggle(root, f1).actionPerformed(null));
+        assertThat(palette.isOpen()).isFalse();
+    }
+
+    @Test
+    void replacingShortcutsUnbindsTheOldOnes() {
+        KeyStroke ctrlK = KeyStroke.getKeyStroke(KeyEvent.VK_K, InputEvent.CTRL_DOWN_MASK);
+
+        palette.setKeyStrokes(ctrlK);
+
+        assertThat(palette.getKeyStrokes()).containsExactly(ctrlK);
+        assertThat(root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(DCommandPalette.DEFAULT_KEY_STROKE)).isNull();
+        assertThat(toggle(root, ctrlK)).isNotNull();
+    }
+
+    private static javax.swing.Action toggle(JRootPane pane, KeyStroke keyStroke) {
+        Object key = pane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(keyStroke);
+        return key == null ? null : pane.getActionMap().get(key);
     }
 
     @Test

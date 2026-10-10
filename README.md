@@ -136,7 +136,7 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   level. When the bar is too narrow, middle crumbs fold into a "…" menu.
   `push`, `pop` and `setPath` build the trail; `addCrumbListener` reports
   clicks.
-- **`DCommandPalette`**: <kbd>Ctrl+Shift+P</kbd> opens a searchable list
+- **`DCommandPalette`**: <kbd>Ctrl+Shift+P</kbd> or <kbd>F1</kbd> opens a searchable list
   of everything the app can do, as in modern editors. Fuzzy matching means
   `fdark` finds *Theme › FlatLaf Dark*. Recently used commands come first.
   It picks up every menu bar item, with its shortcut, so one line gives an

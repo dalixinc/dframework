@@ -151,8 +151,8 @@ Things to try:
 - **Dialogs menu**: the classic animated road-sign icons on real
   `JOptionPane`s.
 - **Window Icon menu**: aliens, skulls, a burger, a flying saucer…
-- **Ctrl+Shift+P**: the command palette. Type `fdark`, `go toast` or
-  `forget`.
+- **Ctrl+Shift+P** or **F1**: the command palette. Type `fdark`,
+  `go toast` or `forget`.
 - **The breadcrumb** above the screens: drill into a call, then click your
   way back.
 - **Move and resize the window, then quit and relaunch**: it comes back
@@ -666,8 +666,8 @@ crumbs.addPropertyChangeListener(DBreadcrumbBar.PATH_PROPERTY, e -> {
 
 ## 12. The command palette: `DCommandPalette`
 
-Press <kbd>Ctrl+Shift+P</kbd>, type a few letters, press <kbd>Enter</kbd>,
-just like in modern code editors.
+Press <kbd>Ctrl+Shift+P</kbd> or <kbd>F1</kbd>, type a few letters, press
+<kbd>Enter</kbd>, just like in modern code editors.
 
 ```java
 DCommandPalette.install(frame);
@@ -705,16 +705,25 @@ commands you used come first.
 
 | Key | Does |
 |---|---|
-| <kbd>Ctrl+Shift+P</kbd> | open / close |
+| <kbd>Ctrl+Shift+P</kbd> or <kbd>F1</kbd> | open / close |
 | <kbd>↑</kbd> <kbd>↓</kbd> <kbd>PgUp</kbd> <kbd>PgDn</kbd> | move |
 | <kbd>Enter</kbd> or click | run |
 | <kbd>Esc</kbd> or click outside | close |
 
 ```java
-palette.setKeyStroke(KeyStroke.getKeyStroke("F1"));   // a different shortcut
-palette.setIncludeMenuBar(false);                     // only your own commands
-palette.open();                                       // e.g. from a menu item
+palette.setKeyStrokes(KeyStroke.getKeyStroke("ctrl K"));   // different shortcuts (one or more)
+palette.setIncludeMenuBar(false);                          // only your own commands
+palette.open();                                            // e.g. from a menu item
 ```
+
+The palette never takes a key away from your menus. If an enabled menu item
+already uses one of its shortcuts (F1 for *Help*, say), that shortcut is left
+to the menu item. Once the palette is open, any of its shortcuts closes it.
+
+> **Ctrl+Shift+P not working?** The window you launched the app from may
+> still have the keyboard focus. On GNOME, windows started from a terminal
+> often don't take it, and in VS Code's terminal, Ctrl+Shift+P opens VS Code's
+> own palette. Click inside the application first, or use F1.
 
 ---
 
@@ -933,6 +942,12 @@ works this out from the data for you.
 It sorts by `toString()` if the column class is `Object`. Return the enum's
 class from `getColumnClass` and it sorts in declaration order (for
 example High, Medium, Low).
+
+**The command palette shortcut does nothing.**
+Click inside your application first: on GNOME, a window started from a
+terminal often doesn't get the keyboard focus. If Ctrl+Shift+P still doesn't
+reach the application, press F1 instead, or choose your own keys with
+`palette.setKeyStrokes(...)`.
 
 **The window icon doesn't change on my Linux desktop.**
 GNOME doesn't show window icons in its title bars. Use

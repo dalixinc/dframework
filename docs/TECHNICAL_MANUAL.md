@@ -701,8 +701,34 @@ get focus properly, and the palette is never left open behind a modal
 dialog.
 
 **Keyboard.**
-- **Opening:** the shortcut is bound `WHEN_IN_FOCUSED_WINDOW` on the root
-  pane, toggling open and closed.
+- **Opening:** each shortcut (by default Ctrl+Shift+P and F1, VS Code's pair)
+  is bound `WHEN_IN_FOCUSED_WINDOW` on the root pane, toggling open and
+  closed. Each has its own action. F1 was added after a user found
+  Ctrl+Shift+P did nothing on their GNOME desktop, although simulated
+  keystrokes worked; a second key gives a reliable fallback.
+- **Stepping aside for menus:** before running a key binding, Swing calls
+  `action.accept(sender)` (`SwingUtilities.notifyAction`). If it returns
+  false, the key isn't consumed, and `KeyboardManager` offers it to the menu
+  bar next. Each toggle action declines when an enabled, visible menu item
+  has the same accelerator, so an application's F1 *Help* keeps working.
+  While the palette is open, every shortcut accepts, so any of them closes it.
+- **Focus on close (a bug found with real keystrokes).** `close()` used to
+  remove the overlay first, while its search box still had the keyboard
+  focus, then focus the bare window. Done in the middle of a key event,
+  that left focus in a state where the *next keyboard-triggered* open
+  couldn't focus the search box: typing went nowhere, and the shortcut
+  couldn't close the palette again. Opening from code was unaffected, which
+  is why API-level tests missed it. Now:
+  - `close()` hands focus back *before* removing the overlay, and only to a
+    real component: the one focused before, or the content pane. Never a
+    `Window`.
+  - `open()` also repeats its focus request with `invokeLater`, after the
+    opening key press has finished being handled.
+
+  Robot-driven checks covered close-then-reopen via F1, via Ctrl+Shift+P and
+  from code, with focus starting in each component type. These need a real
+  display and focus, so they were run by hand rather than added to the
+  headless test suite.
 - **Inside the palette:** navigation keys are bound on the search field.
   The list isn't focusable, so typing always reaches the search box.
 

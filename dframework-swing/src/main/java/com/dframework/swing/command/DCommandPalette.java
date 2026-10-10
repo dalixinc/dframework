@@ -7,6 +7,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.KeyboardFocusManager;
 import java.awt.RenderingHints;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -57,7 +58,7 @@ import com.formdev.flatlaf.FlatClientProperties;
 
 /**
  * A searchable list of everything the user can do, opened with
- * <kbd>Ctrl+Shift+P</kbd>, as in modern editors.
+ * <kbd>Ctrl+Shift+P</kbd> or <kbd>F1</kbd>, as in modern editors.
  *
  * <p>Type part of a command's name and it is found by fuzzy matching ("fdark"
  * finds "Theme › FlatLaf Dark"); <kbd>Enter</kbd> runs it. Recently used
@@ -78,8 +79,16 @@ public final class DCommandPalette {
     public static final KeyStroke DEFAULT_KEY_STROKE =
             KeyStroke.getKeyStroke(KeyEvent.VK_P, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK);
 
+    /**
+     * Ctrl+Shift+P and F1, VS Code's pair. Having a second key helps where
+     * something else on the system takes Ctrl+Shift+P before the application
+     * sees it.
+     */
+    public static final List<KeyStroke> DEFAULT_KEY_STROKES =
+            List.of(DEFAULT_KEY_STROKE, KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
+
     private static final String CLIENT_KEY = DCommandPalette.class.getName();
-    private static final String TOGGLE = "dframework.commandPalette.toggle";
+    private static final String TOGGLE = "dframework.commandPalette.toggle:";
     private static final String PATH_SEPARATOR = " › ";
     private static final int MAX_RECENT = 5;
     private static final double RECENT_BONUS = 3;
@@ -89,45 +98,33 @@ public final class DCommandPalette {
     private final List<Command> commands = new ArrayList<>();
     private final List<Supplier<? extends Collection<Command>>> sources = new ArrayList<>();
     private final Deque<String> recent = new ArrayDeque<>();
-    private KeyStroke keyStroke;
+    private final List<KeyStroke> keyStrokes = new ArrayList<>();
     private boolean includeMenuBar = true;
     private int maxVisibleRows = 10;
     private Overlay overlay;
 
-    private DCommandPalette(JRootPane root, KeyStroke keyStroke) {
+    private DCommandPalette(JRootPane root, KeyStroke... keyStrokes) {
         this.root = root;
-        setKeyStroke(keyStroke);
-        root.getActionMap().put(TOGGLE, new AbstractAction() {
-            @Serial
-            private static final long serialVersionUID = 1L;
-
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (isOpen()) {
-                    close();
-                } else {
-                    open();
-                }
-            }
-        });
+        setKeyStrokes(keyStrokes);
     }
 
-    /** Installs a palette on {@code window}, opened with {@link #DEFAULT_KEY_STROKE}. */
+    /** Installs a palette on {@code window}, opened with {@link #DEFAULT_KEY_STROKES}. */
     public static DCommandPalette install(RootPaneContainer window) {
-        return install(window.getRootPane(), DEFAULT_KEY_STROKE);
+        return install(window.getRootPane(), DEFAULT_KEY_STROKES.toArray(KeyStroke[]::new));
     }
 
     /**
-     * Installs a palette on the window owning {@code root}, or returns the one
-     * already there.
+     * Installs a palette on the window owning {@code root}, opened with any of
+     * {@code keyStrokes}, or returns the one already there (with its shortcuts
+     * replaced).
      */
-    public static DCommandPalette install(JRootPane root, KeyStroke keyStroke) {
+    public static DCommandPalette install(JRootPane root, KeyStroke... keyStrokes) {
         Objects.requireNonNull(root, "root");
         if (root.getClientProperty(CLIENT_KEY) instanceof DCommandPalette existing) {
-            existing.setKeyStroke(keyStroke);
+            existing.setKeyStrokes(keyStrokes);
             return existing;
         }
-        DCommandPalette palette = new DCommandPalette(root, keyStroke);
+        DCommandPalette palette = new DCommandPalette(root, keyStrokes);
         root.putClientProperty(CLIENT_KEY, palette);
         return palette;
     }
@@ -139,19 +136,98 @@ public final class DCommandPalette {
                 ? Optional.of(p) : Optional.empty();
     }
 
-    /** Changes the shortcut that opens (and closes) the palette. */
+    /** Replaces the shortcuts with a single one. */
     public void setKeyStroke(KeyStroke keyStroke) {
-        Objects.requireNonNull(keyStroke, "keyStroke");
-        var inputMap = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-        if (this.keyStroke != null) {
-            inputMap.remove(this.keyStroke);
-        }
-        this.keyStroke = keyStroke;
-        inputMap.put(keyStroke, TOGGLE);
+        setKeyStrokes(keyStroke);
     }
 
+    /**
+     * Sets the shortcuts that open (and close) the palette. Each one steps aside
+     * when an enabled menu item in the window already uses the same key, so the
+     * application's own shortcuts, such as F1 for Help, keep working.
+     */
+    public void setKeyStrokes(KeyStroke... keyStrokes) {
+        if (keyStrokes.length == 0) {
+            throw new IllegalArgumentException("At least one key stroke is required");
+        }
+        var inputMap = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        for (KeyStroke old : this.keyStrokes) {
+            inputMap.remove(old);
+            root.getActionMap().remove(TOGGLE + old);
+        }
+        this.keyStrokes.clear();
+        for (KeyStroke keyStroke : keyStrokes) {
+            Objects.requireNonNull(keyStroke, "keyStroke");
+            this.keyStrokes.add(keyStroke);
+            inputMap.put(keyStroke, TOGGLE + keyStroke);
+            root.getActionMap().put(TOGGLE + keyStroke, new ToggleAction(keyStroke));
+        }
+    }
+
+    /** The first shortcut. */
     public KeyStroke getKeyStroke() {
-        return keyStroke;
+        return keyStrokes.get(0);
+    }
+
+    /** All the shortcuts that open the palette. */
+    public List<KeyStroke> getKeyStrokes() {
+        return List.copyOf(keyStrokes);
+    }
+
+    /** Opens or closes the palette for one shortcut, unless a menu item owns that key. */
+    private final class ToggleAction extends AbstractAction {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private final KeyStroke keyStroke;
+
+        ToggleAction(KeyStroke keyStroke) {
+            this.keyStroke = keyStroke;
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            if (isOpen()) {
+                close();
+            } else {
+                open();
+            }
+        }
+
+        @Override
+        public boolean accept(Object sender) {
+            // Declining leaves the key unconsumed, so Swing offers it to the menu bar next.
+            return isOpen() || !isMenuAccelerator(keyStroke);
+        }
+    }
+
+    /** Whether an enabled, visible menu item in the window uses {@code keyStroke}. */
+    private boolean isMenuAccelerator(KeyStroke keyStroke) {
+        JMenuBar bar = root.getJMenuBar();
+        if (bar == null) {
+            return false;
+        }
+        for (int i = 0; i < bar.getMenuCount(); i++) {
+            JMenu menu = bar.getMenu(i);
+            if (menu != null && menu.isVisible() && menu.isEnabled() && usesAccelerator(menu, keyStroke)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean usesAccelerator(JMenu menu, KeyStroke keyStroke) {
+        for (Component c : menu.getMenuComponents()) {
+            if (!c.isVisible() || !c.isEnabled()) {
+                continue;
+            }
+            if (c instanceof JMenu sub ? usesAccelerator(sub, keyStroke)
+                    : c instanceof JMenuItem item && keyStroke.equals(item.getAccelerator())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public DCommandPalette addCommand(Command command) {
@@ -203,13 +279,23 @@ public final class DCommandPalette {
         if (overlay == null) {
             overlay = new Overlay();
         }
-        overlay.previousFocus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
+        Component focused = KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
+        // Remember a component to return to, never a bare window (see close()).
+        overlay.previousFocus = focused instanceof Window ? null : focused;
         JLayeredPane pane = root.getLayeredPane();
         pane.add(overlay, JLayeredPane.DRAG_LAYER);
         overlay.setBounds(0, 0, pane.getWidth(), pane.getHeight());
         overlay.search.setText("");
         overlay.refresh();
+        overlay.validate();
         overlay.search.requestFocusInWindow();
+        // Ask again once the key press that opened us has been fully handled; a request
+        // made mid-dispatch can be lost after an earlier keyboard close.
+        SwingUtilities.invokeLater(() -> {
+            if (isOpen() && !overlay.search.isFocusOwner()) {
+                overlay.search.requestFocusInWindow();
+            }
+        });
     }
 
     /** Closes the palette without running anything, returning focus to where it was. */
@@ -217,12 +303,19 @@ public final class DCommandPalette {
         if (!isOpen()) {
             return;
         }
+        // Hand focus back *before* removing the overlay. Removing the focused search box
+        // first, then focusing the bare window, left keyboard focus in a state where the
+        // next keyboard-triggered open could not focus the search box (found with real
+        // key presses: F1 to close, then any shortcut to reopen).
+        Component back = overlay.previousFocus;
+        if (back != null && back.isShowing() && back.isFocusable()) {
+            back.requestFocusInWindow();
+        } else {
+            root.getContentPane().requestFocusInWindow();
+        }
         JLayeredPane pane = root.getLayeredPane();
         pane.remove(overlay);
         pane.repaint();
-        if (overlay.previousFocus != null) {
-            overlay.previousFocus.requestFocusInWindow();
-        }
     }
 
     /** All current commands: added ones, sources, and the menu bar. */
