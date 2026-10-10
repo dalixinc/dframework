@@ -1287,7 +1287,7 @@ and filtering is not offered.
 
 ## 7. Testing strategy
 
-**238 tests**, all run by `./gradlew build`.
+**255 tests**, all run by `./gradlew build`.
 
 ### Headless first
 
@@ -1333,7 +1333,8 @@ static void requireDisplay() {
 | reading the palette UI | package-private `search()`, `setQuery()` and `runSelected()` |
 | finding plugins | a test `META-INF/services` file registering a working plugin and one that throws on start-up |
 | running dig | `echo` and `sleep` in place of dig (`DigRunnerTest`), and real dig output saved as fixtures (`DigOutputTest`) |
-| exercising git | a real temporary repository built by the test (`GitIntegrationTest`): every preset, the commit-to-tree-to-blob walk, the index-unchanged check, and the refused `--output` injection |
+| exercising git | a real temporary repository built by the test (`GitIntegrationTest`): every preset, the commit-to-tree-to-blob walk, the index-unchanged check, the refused `--output` injection, and a branch-and-merge history parsed for the graph |
+| checking the graph layout | `CommitGraphTest` asserts lanes and line segments for small hand-written histories, with no painting |
 | calling Claude | a local fake Messages API serving server-sent events (`ClaudeAssistantTest`), and stand-in assistants (`DigExplainPanelTest`) |
 
 ### Regression tests pin every bug found
@@ -1347,6 +1348,11 @@ static void requireDisplay() {
 - `MessageFormat` grouping ("1,000")
 - the filter surviving model and document replacement
 - the decoration swap on theme changes
+- a pasted value with a trailing newline rejected whole by the input filter
+- the graph's main line drifting right when two lines met (lines now bend
+  left)
+- tag refs from `for-each-ref` (`refs/tags/…`) not recognised as tags
+- empty git output giving no feedback (`GitPreset.note`)
 
 ### Visual verification
 
@@ -1359,6 +1365,14 @@ several problems the unit tests couldn't:
 - ragged toast widths
 - the GIF matte
 - Priority sorting alphabetically in the demo data
+- "Under the hood" squeezing the Git Browser's output to about 76 pixels
+  at an ordinary window size
+- faint seams between the graph's rows, from anti-aliasing at cell edges
+
+The same harness also reproduced a user report. Launched the way
+`gradlew run` does (from `dframework-demo/`) and at the user's 1000×640
+window, it showed the Git Browser not opening the repository by default.
+The user's own audit log showed which steps they had taken.
 
 ---
 
@@ -1409,6 +1423,14 @@ several problems the unit tests couldn't:
   plugins needing different versions of the same library would conflict.
 - **The Git Browser reads; it never writes,** so it can't fetch, check
   out or commit. That's deliberate.
+- **The commit graph draws at most *Limit* commits** (500 by default).
+  Older history shows as lines running off the bottom. Lanes in the middle
+  aren't compacted, and a very wide history is clipped at 320 pixels.
+  Because the order is meaningful, the graph can't be sorted or filtered.
+- **Copy and paste in end-to-end tests:** the test session's system
+  clipboard isn't usable, so the paste check drives the field's
+  `TransferHandler` with a private clipboard. That is the same path Ctrl+V
+  takes, but the desktop clipboard itself isn't exercised.
 - **DNS Dig depends on dig's text output**, which isn't a formal
   interface. The parser is lenient and tested against dig 9.18; other
   major versions may need new fixtures.

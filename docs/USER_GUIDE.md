@@ -148,9 +148,9 @@ Run it and try closing the window. You'll be asked first.
 | | Notes | A plain text area |
 | **Tracker 2** | My Calls | The call log pre-filtered to `engineer:dale -closed`. **Refresh** shows a cancellable progress ring; double-click a call to drill in |
 | | Log Call, Open Call, Time Sheet | Placeholders honouring the 2005 VB6 original |
-| **Admin** | Users, Settings, Backup, About | Placeholders, and an About box with a spinning sign |
+| **Admin** | Users, Settings, Backup, About | Placeholders, and an About box with a spinning sign, the DFramework version, the Java version and the theme |
 | **Plugins** | DNS Dig | A plugin found at runtime: run `dig` lookups, see the parsed answers, and see exactly which command runs |
-| | Git Browser | Explore a git repository read-only: common commands from a dropdown, and git's raw objects (commits, trees, blobs) |
+| | Git Browser | Explore a git repository read-only: common commands from a dropdown, a drawn commit graph, and git's raw objects (commits, trees, blobs) |
 
 Things to try:
 
@@ -165,6 +165,10 @@ Things to try:
   way back.
 - **Move and resize the window, then quit and relaunch**: it comes back
   where you left it.
+- **The status bar** shows the theme on the left and the DFramework version
+  on the right. Hover over the version to see the Java version.
+- **Plugins › Git Browser › Graph**: the history as a graph. Double-click a
+  commit to open it in Objects.
 
 ---
 

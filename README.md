@@ -31,8 +31,8 @@ build (`UserGuideExamplesTest`), so they can't drift from the API.
 | `dframework-swing` | The library (`com.dframework.swing`) |
 | `dframework-demo` | Showcase app: Outlook-bar navigation, live theme switcher, validated fields |
 | `dframework-dig` | **DNS Dig**, a plugin: run `dig` lookups and see exactly what runs |
-| `dframework-git` | **Git Browser**, a plugin: explore a repository read-only, including git's raw objects, and see exactly what runs |
-| `dframework-ai` | Claude-backed `AiAssistant` (Anthropic Java SDK), found at runtime; powers DNS Dig's **Explain with AI** |
+| `dframework-git` | **Git Browser**, a plugin: explore a repository read-only, with a drawn commit graph and git's raw objects, and see exactly what runs |
+| `dframework-ai` | Claude-backed `AiAssistant` (Anthropic Java SDK), found at runtime; powers **Explain with AI** in DNS Dig and the Git Browser |
 
 A JavaFX module is planned.
 
@@ -76,6 +76,10 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
     blocks keystrokes and pastes that would break the filter, with a beep.
     Filters: `digits`, `integer`, `maxLength`, `chars`, `regex`. Use a filter
     to keep bad input out, and a validator to judge the finished value.
+  - **Paste tidying:** a paste copied from a terminal or a table is reduced
+    to its first line, or first cell, and trimmed before the filter sees it,
+    so a trailing newline doesn't get the whole paste rejected. Change it
+    with `setPasteCleaner(...)`.
   - **Validation:** `field.setValidator(Validator.required().and(Validator.email()))`.
     Errors show as a red outline with the message in a tooltip, but only once
     the user has visited the field. Listen for `INPUT_VALID_PROPERTY` to
@@ -121,6 +125,16 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   ```java
   DTablePanel calls = new DTablePanel(new DTable(callModel));
   ```
+- **`DCommitGraph`**: a commit history drawn as a graph, like
+  `git log --graph` but painted, with coloured lanes, curves at branches and
+  merges, and badges for HEAD, branches, remote branches and tags. It isn't
+  tied to git: give it `GraphCommit`s (id, parents, refs, subject, author,
+  time). Double-click or Enter opens a commit; Ctrl+C copies its id.
+  ```java
+  DCommitGraph graph = new DCommitGraph();
+  graph.setCommits(commits);                          // children first
+  graph.addOpenListener(commit -> show(commit.id()));
+  ```
 - **`DSearchField`**: a search box with a magnifier, a clear button, Esc to
   clear, and debounced `onSearch(...)` callbacks.
 - **`DBusyPanel`**: wraps any component in a busy overlay. While it's up,
@@ -153,13 +167,24 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   finds on the classpath and displays, in the spirit of ActiveX controls.
   Each starts only when first opened, a plugin that fails is contained in
   its own pane, and each gets its own saved settings and audit records.
-  **DNS Dig** and the **Git Browser** are the first two. Plugins can also use an AI assistant
-  (`AiAssistant`); with `dframework-ai` and an `ANTHROPIC_API_KEY`, DNS Dig
-  can have Claude explain a result in plain English.
+  **DNS Dig** and the **Git Browser** are the first two. Both show the exact
+  command behind every result ("Under the hood") and audit it. The Git
+  Browser is strictly read-only. It offers common commands from a dropdown,
+  a commit graph, and an object inspector (commits, trees, blobs) whose
+  Object box lists recent objects, branches, tags and the graph's commits.
+  Plugins can also use an AI assistant (`AiAssistant`): with `dframework-ai`
+  and an `ANTHROPIC_API_KEY`, Claude explains a result in plain English.
+- **Tool-plugin parts** (`CommandRunner`, `CommandLines`, `DCommandPane`,
+  `DExplainPane`): run a program without a shell, show and copy the exact
+  command line, list this session's history from the audit log, and ask an
+  AI to explain the output. These are the pieces DNS Dig and the Git Browser
+  are built from.
 - **`AuditLog`**: an append-only JSON Lines record of what the application
   did, in `~/.dframework/audit.log`, readable by its owner only.
 - **`DCollapsiblePane`**: a titled section that folds away and remembers
-  whether it was open.
+  whether it was open. `DCollapsiblePane.splitBelow(main, details)` puts it
+  under the main content in a draggable split. It takes up to a third of the
+  height, and collapsing it gives the room back.
 - **`ConfirmCloser`**: an "are you sure?" prompt that works as both a
   `WindowListener` and an `ActionListener`, so the close button and a
   *File → Exit* menu item ask the same question.
@@ -169,6 +194,9 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   runtime restyles every open window. `DTheme.available()` lists what works on
   the current platform.
 - **`DResources`**: classpath-based loading of icons and localised messages.
+- **`DFramework.version()`**: the library's version, stamped by the build
+  from `gradle.properties`. The demo shows it in the status bar and the
+  About box.
 
 ## Building
 
