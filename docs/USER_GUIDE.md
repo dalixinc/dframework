@@ -544,7 +544,7 @@ so `10:30` and web addresses work.
 ```java
 table.getMatchingRowCount();   // rows passing the filter
 table.getTotalRowCount();      // all rows
-table.addPropertyChangeListener(DTable.FILTER_TEXT_PROPERTY, e -> ...);
+table.addPropertyChangeListener(DTable.FILTER_TEXT_PROPERTY, e -> updateCount());
 ```
 
 ### `DTablePanel`
@@ -607,7 +607,7 @@ frame.add(bar, BorderLayout.WEST);
 ```java
 bar.setSelectedItem(item);     // as if clicked: opens its group and runs its action
 bar.getSelectedItem();         // Optional<Item>
-bar.addPropertyChangeListener(DOutlookBar.SELECTED_ITEM_PROPERTY, e -> ...);
+bar.addPropertyChangeListener(DOutlookBar.SELECTED_ITEM_PROPERTY, e -> updateTitle());
 ```
 
 ### Classic style

@@ -11,6 +11,11 @@ dependencies {
     runtimeOnly(files("$rootDir/libs/kunststoff.jar"))
 }
 
+// The User Guide's examples are compiled by a test, so it must re-run when the guide changes.
+tasks.test {
+    inputs.file(rootProject.file("docs/USER_GUIDE.md"))
+}
+
 application {
     mainClass = "com.dframework.demo.DemoApp"
 }
