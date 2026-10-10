@@ -24,6 +24,7 @@ import javax.swing.SwingUtilities;
 
 import com.dframework.swing.CloseAction;
 import com.dframework.swing.DFrame;
+import com.dframework.swing.DFramework;
 import com.dframework.swing.WindowMemory;
 import com.dframework.swing.command.Command;
 import com.dframework.swing.command.DCommandPalette;
@@ -85,7 +86,14 @@ public final class DemoApp {
         JPanel root = new JPanel(new BorderLayout());
         root.add(nav, BorderLayout.WEST);
         root.add(main, BorderLayout.CENTER);
-        root.add(status, BorderLayout.SOUTH);
+        JLabel version = new JLabel(DFramework.nameAndVersion());
+        version.setEnabled(false);   // dimmed: there if you look for it
+        version.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 12));
+        version.setToolTipText("Java " + Runtime.version());
+        JPanel statusBar = new JPanel(new BorderLayout());
+        statusBar.add(status, BorderLayout.CENTER);
+        statusBar.add(version, BorderLayout.EAST);
+        root.add(statusBar, BorderLayout.SOUTH);
 
         DFrame frame = DFrame.builder()
                 .title("DFramework Demo")
@@ -146,8 +154,12 @@ public final class DemoApp {
         addPlaceholder(admin, screens, cards, "Settings", "palette.GIF");
         addPlaceholder(admin, screens, cards, "Backup", "COflp16.gif");
         admin.addItem("About\nDFramework", icon("alien10.gif"), e -> JOptionPane.showMessageDialog(bar,
-                "DFramework: Swing, with a better experience out of the box.\nFirst written 2001, revived 2026.",
-                "About", JOptionPane.INFORMATION_MESSAGE));
+                "<html><b style='font-size:120%'>" + DFramework.nameAndVersion() + "</b><br><br>"
+                        + "Swing, with a better experience out of the box.<br>"
+                        + "First written 2001, revived 2026.<br><br>"
+                        + "<font color='gray'>Java " + Runtime.version()
+                        + ThemeManager.current().map(t -> "  ·  " + t.displayName()).orElse("") + "</font></html>",
+                "About DFramework", JOptionPane.INFORMATION_MESSAGE));
 
         bar.setSelectedItem(showcase.getItems().get(0));
         return bar;

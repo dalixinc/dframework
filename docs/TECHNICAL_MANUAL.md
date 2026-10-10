@@ -230,6 +230,24 @@ when the module split for JavaFX happens.
 - **Kunststoff isn't on Maven Central**, so it's vendored in `libs/` and
   added only to the demo's runtime classpath.
 
+### The version number
+
+`version` in `gradle.properties` is the only place the version is written.
+- **Stamped into the jar:** `processResources` expands it into
+  `com/dframework/swing/version.properties`, which `DFramework.version()`
+  reads.
+- **In the manifest:** the jar records it as `Implementation-Version`.
+  `Package.getImplementationVersion()` was the obvious source, but it only
+  works from a jar, not from an IDE's class folders, which is why the
+  resource file exists.
+- **Configuration cache:** the expansion map is captured as a local value
+  inside the task's configuration. The cache can't store a reference to the
+  build script, which is what a top-level value used inside `filesMatching`
+  becomes.
+- **Tested:** `DFrameworkTest` gets the expected version from Gradle as a
+  system property, so it follows `gradle.properties` and needs no editing
+  on release.
+
 ---
 
 ## 5. Cross-cutting decisions

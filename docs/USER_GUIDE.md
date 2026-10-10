@@ -1321,6 +1321,19 @@ DFramework's own text, such as dialog titles and validation messages, is in
 `com/dframework/swing/messages.properties`. To translate it, add a
 `messages_fr.properties` (or any language) with the same keys.
 
+### The version: `DFramework.version()`
+
+```java
+String v = DFramework.version();               // "4.0.0-SNAPSHOT"
+JLabel about = new JLabel(DFramework.nameAndVersion());   // "DFramework 4.0.0-SNAPSHOT"
+```
+
+The build stamps the version from `gradle.properties` into the jar, so it
+always matches the library in use. It's also in the jar manifest as
+`Implementation-Version`. The demo shows it at the right of its status bar
+and in **Admin › About DFramework**. When running from sources that haven't
+been through the build, it reads `development`.
+
 ---
 
 ## 23. Putting it together
