@@ -12,8 +12,12 @@ import java.util.Arrays;
 import java.util.List;
 
 import javax.swing.AbstractButton;
+import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
 
 import org.junit.jupiter.api.Test;
+
+import com.formdev.flatlaf.FlatClientProperties;
 
 class DOutlookBarTest {
 
@@ -73,6 +77,76 @@ class DOutlookBarTest {
         DOutlookBar.Group foreign = new DOutlookBar().addGroup("Elsewhere");
 
         assertThatThrownBy(() -> bar.setSelectedGroup(foreign)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void overflowingGroupScrollsWithoutSqueezingItems() {
+        DOutlookBar tall = new DOutlookBar();
+        DOutlookBar.Group many = tall.addGroup("Reports");
+        for (int i = 1; i <= 20; i++) {
+            many.addItem("Report " + i, null, e -> { });
+        }
+        JScrollPane scroller = scrollerOf(tall);
+        int itemWidth = scroller.getViewport().getView().getPreferredSize().width;
+        int barWidth = scroller.getVerticalScrollBar().getPreferredSize().width;
+
+        // Room for the scroll bar is reserved, so items keep their width when it appears.
+        assertThat(scroller.getPreferredSize().width).isGreaterThanOrEqualTo(itemWidth + barWidth);
+
+        tall.setSize(tall.getPreferredSize().width, 300);
+        layoutTree(tall);
+        assertThat(scroller.getVerticalScrollBar().isVisible()).isTrue();
+        assertThat(scroller.getViewport().getWidth()).isGreaterThanOrEqualTo(itemWidth);
+    }
+
+    @Test
+    void shortGroupHasNoScrollBar() {
+        JScrollPane scroller = scrollerOf(bar);
+        bar.setSize(bar.getPreferredSize().width, 600);
+        layoutTree(bar);
+
+        assertThat(scroller.getVerticalScrollBar().isVisible()).isFalse();
+    }
+
+    @Test
+    void scrollBarsAreStyledToMatchTheContentBackground() {
+        JScrollBar vertical = scrollerOf(bar).getVerticalScrollBar();
+        assertThat(vertical.getClientProperty(FlatClientProperties.SCROLL_BAR_SHOW_BUTTONS)).isEqualTo(true);
+        assertThat((String) vertical.getClientProperty(FlatClientProperties.STYLE)).doesNotContain("thumb");
+
+        bar.applyClassicStyle();
+        assertThat((String) vertical.getClientProperty(FlatClientProperties.STYLE)).contains("thumb: #");
+
+        bar.applyThemeStyle();
+        assertThat((String) vertical.getClientProperty(FlatClientProperties.STYLE)).doesNotContain("thumb");
+    }
+
+    private static JScrollPane scrollerOf(DOutlookBar outlook) {
+        return findScroller(outlook);
+    }
+
+    private static JScrollPane findScroller(Container c) {
+        for (Component k : c.getComponents()) {
+            if (k instanceof JScrollPane sp && k.isVisible()) {
+                return sp;
+            }
+            if (k instanceof Container cc) {
+                JScrollPane found = findScroller(cc);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static void layoutTree(Component c) {
+        c.doLayout();
+        if (c instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                layoutTree(child);
+            }
+        }
     }
 
     @Test

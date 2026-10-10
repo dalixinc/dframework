@@ -11,6 +11,8 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.io.Serial;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,11 +28,14 @@ import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JToggleButton;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.UIManager;
+
+import com.formdev.flatlaf.FlatClientProperties;
 
 /**
  * An Outlook-style navigation bar: a stack of group headers, with the open
@@ -150,6 +155,7 @@ public class DOutlookBar extends JPanel {
     public void setContentBackground(Color color) {
         Color old = contentBackground;
         contentBackground = color;
+        groups.forEach(g -> styleScrollBar(g.scroller.getVerticalScrollBar()));
         firePropertyChange("contentBackground", old, color);
         repaint();
     }
@@ -203,6 +209,30 @@ public class DOutlookBar extends JPanel {
         // A shade away from the panel colour, so the bar reads as its own area.
         boolean dark = (panel.getRed() + panel.getGreen() + panel.getBlue()) / 3 < 128;
         return dark ? shade(panel, 1.25f) : shade(panel, 0.92f);
+    }
+
+    /**
+     * On a custom content background (such as the classic khaki), colours the
+     * scroll bar to match so it stays visible; on the theme's own background the
+     * theme's scroll bar is used. Only FlatLaf reads this style; other look and
+     * feels draw their usual scroll bar.
+     */
+    private void styleScrollBar(JScrollBar bar) {
+        // A little wider than FlatLaf's default, which is easy to miss beside large icons.
+        String width = "width: 13";
+        if (contentBackground == null) {
+            bar.putClientProperty(FlatClientProperties.STYLE, width);
+            return;
+        }
+        bar.putClientProperty(FlatClientProperties.STYLE, width
+                + "; track: " + hex(shade(contentBackground, 1.08f))
+                + "; thumb: " + hex(shade(contentBackground, 0.70f))
+                + "; hoverThumbColor: " + hex(shade(contentBackground, 0.60f))
+                + "; pressedThumbColor: " + hex(shade(contentBackground, 0.50f)));
+    }
+
+    private static String hex(Color c) {
+        return String.format("#%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue());
     }
 
     private Color effectiveItemForeground() {
@@ -262,12 +292,15 @@ public class DOutlookBar extends JPanel {
             header = new HeaderButton(title);
             header.setBackground(headerBackground);
             header.addActionListener(e -> setSelectedGroup(this));
-            scroller = new JScrollPane(list, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-                    JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+            scroller = new ItemScroller(list);
             scroller.setBorder(BorderFactory.createEmptyBorder());
             scroller.setOpaque(false);
             scroller.getViewport().setOpaque(false);
-            scroller.getVerticalScrollBar().setUnitIncrement(16);
+            JScrollBar bar = scroller.getVerticalScrollBar();
+            bar.setUnitIncrement(16);
+            // Arrow buttons make it obvious the group scrolls; FlatLaf's default thin bar is easy to miss.
+            bar.putClientProperty(FlatClientProperties.SCROLL_BAR_SHOW_BUTTONS, true);
+            styleScrollBar(bar);
         }
 
         public String getTitle() {
@@ -377,6 +410,13 @@ public class DOutlookBar extends JPanel {
             setBorder(BorderFactory.createEmptyBorder(6, 4, 6, 4));
             setAlignmentX(Component.CENTER_ALIGNMENT);
             getAccessibleContext().setAccessibleName(text.replace('\n', ' '));
+            // Tabbing to an item that is scrolled out of sight brings it into view.
+            addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusGained(FocusEvent e) {
+                    scrollRectToVisible(new Rectangle(getSize()));
+                }
+            });
         }
 
         @Override
@@ -410,6 +450,30 @@ public class DOutlookBar extends JPanel {
     private static String captionHtml(String text) {
         String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>");
         return "<html><div style='text-align:center'>" + escaped + "</div></html>";
+    }
+
+    /**
+     * Scroll pane whose preferred width always includes the vertical scroll bar,
+     * so the bar keeps a stable width and items aren't squeezed when a group
+     * overflows. (JScrollPane only counts the bar when it is forced on.)
+     */
+    private static final class ItemScroller extends JScrollPane {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        ItemScroller(Component view) {
+            super(view, VERTICAL_SCROLLBAR_AS_NEEDED, HORIZONTAL_SCROLLBAR_NEVER);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            Dimension size = super.getPreferredSize();
+            if (!isPreferredSizeSet()) {
+                size.width += getVerticalScrollBar().getPreferredSize().width;
+            }
+            return size;
+        }
     }
 
     /** Vertical list of items that tracks the viewport width, so it never scrolls sideways. */
