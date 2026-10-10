@@ -9,7 +9,7 @@ Java 21.
 | Module | Contents |
 |---|---|
 | `dframework-swing` | The library (`com.dframework.swing`) |
-| `dframework-demo` | Showcase app with a live theme switcher |
+| `dframework-demo` | Showcase app: Outlook-bar navigation, live theme switcher, validated fields |
 
 A JavaFX module is planned.
 
@@ -43,6 +43,29 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   puts DFramework's classic spinning road-sign icons on *every*
   `JOptionPane` in the app, including plain `JOptionPane.showMessageDialog`
   calls. They survive theme switches; `Style.LOOK_AND_FEEL` turns them off.
+- **`DTextField`** (rebuilt from 2007): a text field with live validation and a
+  focus highlight.
+  - **Validation:** `field.setValidator(Validator.required().and(Validator.email()))`.
+    Errors show as a red outline with the message in a tooltip, but only once
+    the user has visited the field. Listen for `INPUT_VALID_PROPERTY` to
+    enable an OK button. Built-in validators: `required`, `email`, `integer`,
+    `integer(min, max)`, `maxLength`, `matches(regex, message)`, or your own
+    lambda.
+  - **Focus highlight:** the background turns pale yellow while focused.
+    Change it with `setFocusBackground(color)`, or pass `null` to turn it off.
+    If the colour would make the text unreadable (on a dark theme, say), the
+    text switches to black or white.
+  - **`FocusHighlighter`** brings the same highlight to any component, or to
+    every text field in the app with `FocusHighlighter.enableGlobally(color)`.
+- **`DOutlookBar`** (rebuilt from 2007, after the VB6 Tracker 2 design): an
+  Outlook-style navigation bar. Groups stack as headers, and the open
+  group's items show as large icons with captions. `applyClassicStyle()`
+  recreates the original Windows XP khaki look.
+  ```java
+  DOutlookBar bar = new DOutlookBar();
+  bar.addGroup("Logging").addItem("Log Call", icon, e -> cards.show(main, "log"));
+  bar.addGroup("Reports").addItem("Customer\nGroups", icon, e -> ...);
+  ```
 - **`ConfirmCloser`**: an "are you sure?" prompt that works as both a
   `WindowListener` and an `ActionListener`, so the close button and a
   *File → Exit* menu item ask the same question.

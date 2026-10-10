@@ -1,19 +1,13 @@
 package com.dframework.demo;
 
 import java.awt.BorderLayout;
-import java.awt.FlowLayout;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
+import java.awt.CardLayout;
 import java.awt.event.KeyEvent;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
 import javax.swing.ButtonGroup;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
+import javax.swing.Icon;
 import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -21,30 +15,21 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
-import javax.swing.JRadioButton;
 import javax.swing.JRadioButtonMenuItem;
-import javax.swing.JScrollPane;
-import javax.swing.JSlider;
-import javax.swing.JSpinner;
-import javax.swing.JTabbedPane;
-import javax.swing.JTable;
-import javax.swing.JTextArea;
-import javax.swing.JTextField;
-import javax.swing.JToggleButton;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 
 import com.dframework.swing.CloseAction;
 import com.dframework.swing.DFrame;
 import com.dframework.swing.dialog.MessageIcons;
+import com.dframework.swing.nav.DOutlookBar;
 import com.dframework.swing.theme.DTheme;
 import com.dframework.swing.theme.ThemeManager;
 import com.dframework.swing.util.DResources;
 
 /**
- * Showcase for DFramework: a frame with a theme switcher and a spread of
- * standard components, so each look and feel can be compared at a glance.
+ * Showcase for DFramework: an Outlook bar navigating between demo screens,
+ * with menus for switching theme, dialog icons and the window icon.
  */
 public final class DemoApp {
 
@@ -76,8 +61,13 @@ public final class DemoApp {
         ThemeManager.addThemeListener(theme -> status.setText("Theme: " + theme.displayName()));
         ThemeManager.current().ifPresent(theme -> status.setText("Theme: " + theme.displayName()));
 
+        CardLayout cards = new CardLayout();
+        JPanel screens = new JPanel(cards);
+        DOutlookBar nav = navigation(screens, cards);
+
         JPanel root = new JPanel(new BorderLayout());
-        root.add(showcase(), BorderLayout.CENTER);
+        root.add(nav, BorderLayout.WEST);
+        root.add(screens, BorderLayout.CENTER);
         root.add(status, BorderLayout.SOUTH);
 
         DFrame frame = DFrame.builder()
@@ -86,13 +76,60 @@ public final class DemoApp {
                 .closeAction(CloseAction.CONFIRM_EXIT)
                 .lafDecorated(true)
                 .content(root)
-                .size(820, 560)
+                .size(1000, 640)
                 .build();
-        frame.setJMenuBar(menuBar(frame));
+        frame.setJMenuBar(menuBar(frame, nav));
         frame.setVisible(true);
     }
 
-    private static JMenuBar menuBar(DFrame frame) {
+    /** The Outlook bar drives the demo: each item shows a screen in the card panel. */
+    private static DOutlookBar navigation(JPanel screens, CardLayout cards) {
+        DOutlookBar bar = new DOutlookBar();
+
+        DOutlookBar.Group showcase = bar.addGroup("Showcase");
+        addScreen(showcase, screens, cards, "Controls", "ScreenPos.GIF", ShowcaseScreens.controls());
+        addScreen(showcase, screens, cards, "Fields", "check.GIF", FieldsScreen.create());
+        addScreen(showcase, screens, cards, "Table", "BOOK02.GIF", ShowcaseScreens.table());
+        addScreen(showcase, screens, cards, "Notes", "Log.gif", ShowcaseScreens.notes());
+
+        // A tribute to the VB6 bar this control is modelled on.
+        DOutlookBar.Group tracker = bar.addGroup("Tracker 2");
+        for (String[] item : new String[][] {
+                {"Log Call", "FILM01.GIF"}, {"Open Call", "cdrom1.gif"},
+                {"My Calls", "company.gif"}, {"Time\nSheet", "food25.gif"}}) {
+            addPlaceholder(tracker, screens, cards, item[0], item[1]);
+        }
+
+        DOutlookBar.Group admin = bar.addGroup("Admin");
+        addPlaceholder(admin, screens, cards, "Users", "chgpwd.GIF");
+        addPlaceholder(admin, screens, cards, "Settings", "palette.GIF");
+        addPlaceholder(admin, screens, cards, "Backup", "COflp16.gif");
+        admin.addItem("About\nDFramework", icon("alien10.gif"), e -> JOptionPane.showMessageDialog(bar,
+                "DFramework: Swing, with a better experience out of the box.\nFirst written 2001, revived 2026.",
+                "About", JOptionPane.INFORMATION_MESSAGE));
+
+        bar.setSelectedItem(showcase.getItems().get(0));
+        return bar;
+    }
+
+    private static void addScreen(DOutlookBar.Group group, JPanel screens, CardLayout cards,
+            String title, String icon, JComponent screen) {
+        String card = group.getTitle() + "/" + title;
+        screens.add(screen, card);
+        group.addItem(title, icon(icon), e -> cards.show(screens, card));
+    }
+
+    private static void addPlaceholder(DOutlookBar.Group group, JPanel screens, CardLayout cards,
+            String title, String icon) {
+        addScreen(group, screens, cards, title, icon,
+                ShowcaseScreens.placeholder(group.getTitle(), title, icon(icon)));
+    }
+
+    private static Icon icon(String name) {
+        return DResources.load(ICONS + name).orElseThrow();
+    }
+
+    private static JMenuBar menuBar(DFrame frame, DOutlookBar nav) {
         JMenu file = new JMenu("File");
         file.setMnemonic(KeyEvent.VK_F);
         JMenuItem exit = new JMenuItem("Exit");
@@ -112,6 +149,16 @@ public final class DemoApp {
             group.add(item);
             theme.add(item);
         }
+        theme.addSeparator();
+        JCheckBoxMenuItem classic = new JCheckBoxMenuItem("Classic Outlook Bar (Tracker 2)");
+        classic.addActionListener(e -> {
+            if (classic.isSelected()) {
+                nav.applyClassicStyle();
+            } else {
+                nav.applyThemeStyle();
+            }
+        });
+        theme.add(classic);
 
         JMenuBar bar = new JMenuBar();
         bar.add(file);
@@ -171,83 +218,5 @@ public final class DemoApp {
         JMenuItem item = new JMenuItem(text);
         item.addActionListener(e -> action.run());
         return item;
-    }
-
-    private static JComponent showcase() {
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.addTab("Controls", controls());
-        tabs.addTab("Table", new JScrollPane(table()));
-        tabs.addTab("Text", new JScrollPane(new JTextArea(
-                "The DFramework, first written in 2001 and revived in 2026.\n\nType here...")));
-        return tabs;
-    }
-
-    private static JComponent controls() {
-        JPanel form = new JPanel(new GridBagLayout());
-        form.setBorder(BorderFactory.createTitledBorder("The Border"));
-        GridBagConstraints c = new GridBagConstraints();
-        c.insets = new Insets(6, 8, 6, 8);
-        c.anchor = GridBagConstraints.WEST;
-        c.fill = GridBagConstraints.HORIZONTAL;
-
-        row(form, c, 0, "Name", new JTextField(24));
-        row(form, c, 1, "Choice", new JComboBox<>(new String[] {"Metal", "Ocean", "Kunststoff", "FlatLaf"}));
-        row(form, c, 2, "Count", new JSpinner());
-        row(form, c, 3, "Volume", new JSlider(0, 100, 65));
-        JProgressBar progress = new JProgressBar(0, 100);
-        progress.setValue(40);
-        progress.setStringPainted(true);
-        row(form, c, 4, "Progress", progress);
-
-        JRadioButton one = new JRadioButton("One", true);
-        JRadioButton two = new JRadioButton("Two");
-        ButtonGroup group = new ButtonGroup();
-        group.add(one);
-        group.add(two);
-        row(form, c, 5, "Options", flow(one, two, new JCheckBox("Check me", true)));
-
-        JButton disabled = new JButton("Disabled");
-        disabled.setEnabled(false);
-        row(form, c, 6, "Buttons", flow(new JButton("Testing"), new JToggleButton("Toggle"), disabled));
-
-        JPanel wrapper = new JPanel(new BorderLayout());
-        wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-        wrapper.add(form, BorderLayout.NORTH);
-        return wrapper;
-    }
-
-    /** Lays components out left to right with a small gap between them. */
-    private static JPanel flow(JComponent... components) {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
-        for (JComponent component : components) {
-            if (panel.getComponentCount() > 0) {
-                panel.add(Box.createHorizontalStrut(8));
-            }
-            panel.add(component);
-        }
-        return panel;
-    }
-
-    private static void row(JPanel form, GridBagConstraints c, int y, String label, JComponent field) {
-        c.gridy = y;
-        c.gridx = 0;
-        c.weightx = 0;
-        form.add(new JLabel(label), c);
-        c.gridx = 1;
-        c.weightx = 1;
-        form.add(field, c);
-    }
-
-    private static JTable table() {
-        String[] columns = {"Component", "Since", "Status"};
-        Object[][] rows = {
-                {"DFrame", 2001, "Modernised"},
-                {"ConfirmCloser", 2026, "New (was QCloser + DCloser)"},
-                {"ThemeManager", 2026, "New (was DLookAndFeelManager)"},
-                {"DTheme", 2026, "New (was KnownLookAndFeels)"},
-        };
-        JTable table = new JTable(rows, columns);
-        table.setAutoCreateRowSorter(true);
-        return table;
     }
 }
