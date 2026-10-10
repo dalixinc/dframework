@@ -29,8 +29,6 @@ import javax.swing.JToggleButton;
 import javax.swing.SwingConstants;
 
 import com.dframework.swing.button.DToggleSwitch;
-import com.dframework.swing.table.DTable;
-import com.dframework.swing.table.DTablePanel;
 import com.dframework.swing.theme.DTheme;
 import com.dframework.swing.theme.ThemeManager;
 
@@ -106,15 +104,6 @@ final class ShowcaseScreens {
         c.gridx = 1;
         c.weightx = 1;
         form.add(field, c);
-    }
-
-    /** The searchable call log; {@code filter} pre-fills the search box. */
-    static JComponent calls(String filter) {
-        DTable table = new DTable(new CallLog(300));
-        table.packColumns(320);
-        DTablePanel panel = new DTablePanel(table);
-        table.setFilterText(filter);
-        return panel;
     }
 
     static JComponent notes() {

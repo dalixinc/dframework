@@ -2,12 +2,14 @@ package com.dframework.demo;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Image;
 import java.awt.event.KeyEvent;
 import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -26,6 +28,8 @@ import com.dframework.swing.WindowMemory;
 import com.dframework.swing.command.Command;
 import com.dframework.swing.command.DCommandPalette;
 import com.dframework.swing.dialog.MessageIcons;
+import com.dframework.swing.nav.DBreadcrumbBar;
+import com.dframework.swing.nav.DBreadcrumbBar.Crumb;
 import com.dframework.swing.nav.DOutlookBar;
 import com.dframework.swing.notify.DToast;
 import com.dframework.swing.theme.DTheme;
@@ -69,11 +73,16 @@ public final class DemoApp {
 
         CardLayout cards = new CardLayout();
         JPanel screens = new JPanel(cards);
-        DOutlookBar nav = navigation(screens, cards);
+        DBreadcrumbBar crumbs = new DBreadcrumbBar();
+        DOutlookBar nav = navigation(screens, cards, crumbs);
+        linkBreadcrumbs(nav, crumbs);
 
+        JPanel main = new JPanel(new BorderLayout());
+        main.add(crumbs, BorderLayout.NORTH);
+        main.add(screens, BorderLayout.CENTER);
         JPanel root = new JPanel(new BorderLayout());
         root.add(nav, BorderLayout.WEST);
-        root.add(screens, BorderLayout.CENTER);
+        root.add(main, BorderLayout.CENTER);
         root.add(status, BorderLayout.SOUTH);
 
         DFrame frame = DFrame.builder()
@@ -92,21 +101,41 @@ public final class DemoApp {
     }
 
     /** The Outlook bar drives the demo: each item shows a screen in the card panel. */
-    private static DOutlookBar navigation(JPanel screens, CardLayout cards) {
+    /**
+     * Keeps the breadcrumb in step with the Outlook bar, and makes clicking a
+     * crumb navigate: the root goes to the first screen, a group to its first item.
+     */
+    private static void linkBreadcrumbs(DOutlookBar nav, DBreadcrumbBar crumbs) {
+        Icon home = new ImageIcon(DResources.load(ICONS + "alien10.gif").orElseThrow()
+                .getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH));
+        Runnable sync = () -> nav.getSelectedItem().ifPresent(item -> crumbs.setPath(
+                new Crumb("DFramework", home, nav.getGroups().get(0).getItems().get(0)),
+                Crumb.of(item.group().getTitle(), item.group().getItems().get(0)),
+                Crumb.of(item.getText().replace('\n', ' '), item)));
+        nav.addPropertyChangeListener(DOutlookBar.SELECTED_ITEM_PROPERTY, e -> sync.run());
+        sync.run();
+        crumbs.addCrumbListener(crumb -> {
+            if (crumb.value() instanceof DOutlookBar.Item item) {
+                nav.setSelectedItem(item);
+            }
+        });
+    }
+
+    private static DOutlookBar navigation(JPanel screens, CardLayout cards, DBreadcrumbBar crumbs) {
         DOutlookBar bar = new DOutlookBar();
 
         DOutlookBar.Group showcase = bar.addGroup("Showcase");
         addScreen(showcase, screens, cards, "Controls", "ScreenPos.GIF", ShowcaseScreens.controls());
         addScreen(showcase, screens, cards, "Fields", "check.GIF", FieldsScreen.create());
         addScreen(showcase, screens, cards, "Toasts", "food24.gif", ToastsScreen.create());
-        addScreen(showcase, screens, cards, "Table", "BOOK02.GIF", ShowcaseScreens.calls(""));
+        addScreen(showcase, screens, cards, "Table", "BOOK02.GIF", CallsScreen.create("", crumbs));
         addScreen(showcase, screens, cards, "Notes", "Log.gif", ShowcaseScreens.notes());
 
         // A tribute to the VB6 bar this control is modelled on.
         DOutlookBar.Group tracker = bar.addGroup("Tracker 2");
         addPlaceholder(tracker, screens, cards, "Log Call", "FILM01.GIF");
         addPlaceholder(tracker, screens, cards, "Open Call", "cdrom1.gif");
-        addScreen(tracker, screens, cards, "My Calls", "company.gif", ShowcaseScreens.calls("engineer:dale -closed"));
+        addScreen(tracker, screens, cards, "My Calls", "company.gif", CallsScreen.create("engineer:dale -closed", crumbs));
         addPlaceholder(tracker, screens, cards, "Time\nSheet", "food25.gif");
 
         DOutlookBar.Group admin = bar.addGroup("Admin");

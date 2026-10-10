@@ -100,6 +100,22 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   ```
 - **`DSearchField`**: a search box with a magnifier, a clear button, Esc to
   clear, and debounced `onSearch(...)` callbacks.
+- **`DBusyPanel`**: wraps any component in a busy overlay. While it's up,
+  the panel is dimmed and shows a spinner (or a progress ring when the work
+  reports a percentage) and a message. Mouse and keyboard input to that
+  panel is blocked; the rest of the window stays usable.
+  ```java
+  DBusyPanel busy = new DBusyPanel(callsScreen);
+  busy.run("Loading calls…", progress -> repository.load(progress::setProgress), table::setModel);
+  ```
+  The work runs on a background thread, and the result is passed back on the
+  Swing event thread. Esc can cancel it. The overlay waits briefly before
+  appearing, so quick jobs don't flicker.
+- **`DBreadcrumbBar`**: a breadcrumb trail such as
+  `Home › Reports › Customers`. Each earlier crumb is a link back to its
+  level. When the bar is too narrow, middle crumbs fold into a "…" menu.
+  `push`, `pop` and `setPath` build the trail; `addCrumbListener` reports
+  clicks.
 - **`DCommandPalette`**: <kbd>Ctrl+Shift+P</kbd> opens a searchable list
   of everything the app can do, as in modern editors. Fuzzy matching means
   `fdark` finds *Theme › FlatLaf Dark*. Recently used commands come first.

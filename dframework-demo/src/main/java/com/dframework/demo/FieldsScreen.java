@@ -19,6 +19,7 @@ import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JTextField;
 
+import com.dframework.swing.busy.DBusyPanel;
 import com.dframework.swing.field.DTextField;
 import com.dframework.swing.field.FocusHighlighter;
 import com.dframework.swing.field.InputFilter;
@@ -65,9 +66,13 @@ final class FieldsScreen {
         Runnable updateSubmit = () -> submit.setEnabled(fields.stream().allMatch(DTextField::isInputValid));
         fields.forEach(f -> f.addPropertyChangeListener(DTextField.INPUT_VALID_PROPERTY, e -> updateSubmit.run()));
         updateSubmit.run();
+        DBusyPanel[] busy = new DBusyPanel[1];   // created below, once the form exists
         submit.addActionListener(e -> {
             if (fields.stream().allMatch(DTextField::validateInput)) {
-                DToast.success(submit, "Thanks, " + name.getText().strip() + "! Form submitted.");
+                busy[0].run("Submitting\u2026", progress -> {
+                    Thread.sleep(1200);   // pretend to talk to a server
+                    return name.getText().strip();
+                }, who -> DToast.success(submit, "Thanks, " + who + "! Form submitted."));
             }
         });
         JButton clear = new JButton("Clear");
@@ -127,7 +132,8 @@ final class FieldsScreen {
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
         wrapper.add(column, BorderLayout.NORTH);
-        return wrapper;
+        busy[0] = new DBusyPanel(wrapper);
+        return busy[0];
     }
 
     private static void row(JPanel form, GridBagConstraints c, int y, String label, JComponent field, String hint) {
