@@ -82,6 +82,13 @@ final class DigView extends JPanel {
     private final transient Map<DigOptions.Flag, DToggleSwitch> switches = new EnumMap<>(DigOptions.Flag.class);
     private final JButton run = new JButton("Dig");
     private final JButton stop = new JButton("Stop");
+    private final JButton explain = new JButton("Explain with AI");
+    private final transient DigExplainPanel explainPanel;
+    /** The last finished run, for explaining: display command, exit code, output. */
+    private transient LastRun lastRun;
+
+    private record LastRun(String command, int exitCode, List<String> lines) {
+    }
 
     private final JLabel status = new JLabel(" ");
     private final RecordModel records = new RecordModel();
@@ -100,6 +107,7 @@ final class DigView extends JPanel {
         super(new BorderLayout(0, 8));
         this.context = context;
         this.digAvailable = DigRunner.locate(DigCommand.EXECUTABLE).isPresent();
+        this.explainPanel = context.ai().map(ai -> new DigExplainPanel(context, ai)).orElse(null);
         setBorder(BorderFactory.createEmptyBorder(4, 12, 12, 12));
 
         JPanel top = new JPanel(new BorderLayout(0, 6));
@@ -116,6 +124,10 @@ final class DigView extends JPanel {
         answers.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);   // the Data column takes what's left
         results.addTab("Answers", new DTablePanel(answers, "Filter answers"));
         results.addTab("Raw output", new JScrollPane(raw));
+        if (explainPanel != null) {
+            results.addTab("AI explanation", explainPanel);
+            explainPanel.setOnStateChange(this::updateButtons);
+        }
         add(results, BorderLayout.CENTER);
 
         underTheHood = new DCollapsiblePane("Under the hood", underTheHoodContent());
@@ -167,6 +179,11 @@ final class DigView extends JPanel {
         grid.add(type, c);
         grid.add(run, c);
         grid.add(stop, c);
+        if (context.ai().isPresent()) {
+            explain.setEnabled(false);
+            explain.setToolTipText("Have " + context.ai().get().name() + " explain the last result in plain English");
+            grid.add(explain, c);
+        }
 
         c.gridy = 1;
         grid.add(new JLabel("Server"), c);
@@ -301,6 +318,7 @@ final class DigView extends JPanel {
         server.addActionListener(e -> run());
         run.addActionListener(e -> run());
         stop.addActionListener(e -> cancel());
+        explain.addActionListener(e -> explainResult());
     }
 
     // ---- behaviour ------------------------------------------------------------------------
@@ -355,11 +373,9 @@ final class DigView extends JPanel {
         records.setRecords(List.of());
         status.setForeground(name.getForeground());
         status.setText("Running…  " + display);
-        run.setEnabled(false);
-        stop.setEnabled(true);
-
         DigRunner current = new DigRunner();
         runner = current;
+        updateButtons();
         new SwingWorker<DigRunner.Outcome, String>() {
             @Override
             protected DigRunner.Outcome doInBackground() throws Exception {
@@ -374,8 +390,6 @@ final class DigView extends JPanel {
             @Override
             protected void done() {
                 runner = null;
-                run.setEnabled(true);
-                stop.setEnabled(false);
                 try {
                     finished(options, display, get());
                 } catch (ExecutionException e) {
@@ -383,6 +397,7 @@ final class DigView extends JPanel {
                 } catch (InterruptedException | CancellationException e) {
                     failed(options, display, e);
                 }
+                updateButtons();
             }
         }.execute();
     }
@@ -392,6 +407,30 @@ final class DigView extends JPanel {
         if (current != null) {
             current.cancel();
         }
+        if (explainPanel != null) {
+            explainPanel.cancel();
+        }
+    }
+
+    /** Asks the AI assistant to explain the last result. */
+    void explainResult() {
+        if (explainPanel == null || lastRun == null || explainPanel.isRunning()) {
+            return;
+        }
+        results.setSelectedComponent(explainPanel);
+        explainPanel.explain(lastRun.command(), lastRun.exitCode(), lastRun.lines());
+    }
+
+    boolean canExplain() {
+        return explainPanel != null;
+    }
+
+    private void updateButtons() {
+        boolean digging = runner != null;
+        boolean explaining = explainPanel != null && explainPanel.isRunning();
+        run.setEnabled(digAvailable && !digging);
+        stop.setEnabled(digging || explaining);
+        explain.setEnabled(lastRun != null && !digging && !explaining);
     }
 
     /** Stops any running lookup and detaches from the audit log. */
@@ -414,6 +453,7 @@ final class DigView extends JPanel {
     }
 
     private void finished(DigOptions options, String display, DigRunner.Outcome outcome) {
+        lastRun = outcome.cancelled() ? null : new LastRun(display, outcome.exitCode(), outcome.lines());
         DigOutput.Result result = DigOutput.parse(outcome.lines(), options);
         records.setRecords(result.records());
         answers.packColumns(420);   // size columns to this result, so long values like MX hosts fit
@@ -448,6 +488,7 @@ final class DigView extends JPanel {
     }
 
     private void failed(DigOptions options, String display, Throwable error) {
+        lastRun = null;   // nothing (new) to explain
         String message = error instanceof IOException ? error.getMessage() : String.valueOf(error);
         setStatus(BAD, "Could not run dig: " + message);
         raw.append("\n" + message + "\n");

@@ -133,6 +133,9 @@ graph LR
     swing --> flatlaf["FlatLaf 3.7.2"]
     demo -. runtime .-> kunst["libs/kunststoff.jar"]
     demo -. "runtime (ServiceLoader)" .-> dig
+    ai["dframework-ai<br/><i>Claude assistant</i>"] --> swing
+    ai --> sdk["Anthropic Java SDK 2.65.0"]
+    demo -. "runtime (ServiceLoader)" .-> ai
     buildSrc["buildSrc<br/><i>dframework.java-conventions</i>"] -. configures .-> swing
     buildSrc -. configures .-> demo
 ```
@@ -141,6 +144,7 @@ graph LR
 |---|---|
 | `dframework-swing` | The library, published as `com.dframework:dframework-swing` |
 | `dframework-demo` | The showcase (`./gradlew :dframework-demo:run`). It's also the integration test bed: every component is used here as an application would use it |
+| `dframework-ai` | `ClaudeAssistant`, an `AiAssistant` backed by the Anthropic Java SDK. Optional, so the library itself carries no SDK dependencies; found through `ServiceLoader` |
 | `dframework-dig` | The DNS Dig plugin. It depends on the library; the demo has it only on its *runtime* classpath and finds it through `ServiceLoader`, which proves the plugin mechanism end to end |
 | `buildSrc` | One convention plugin shared by every module |
 
@@ -162,6 +166,7 @@ graph LR
 | `panel` | `DCollapsiblePane` |
 | `audit` | `AuditLog` |
 | `plugin` | `DPlugin`, `PluginContext`, `DPluginPane`, `DPluginHost` |
+| `ai` | `AiAssistant`, `AiPrompt`, `AiAnswer`, `AiException` |
 | `util` | `DResources` |
 
 Resources live under `com/dframework/swing/`:
@@ -1011,11 +1016,84 @@ command, the name, type and server, the outcome (`ok`, `failed`,
 `cancelled` or `error`), the exit code, the duration, the DNS status, and
 the record and line counts. Plugin start and stop are recorded by the host.
 
+### 6.20 AI assistance (`AiAssistant`, `dframework-ai`)
+
+**A provider-neutral interface.**
+- **Interface:** the library defines `AiAssistant` (name, model, provider,
+  `setupHint()`, and a blocking, streaming `ask`) plus the `AiPrompt`,
+  `AiAnswer` and `AiException` value types.
+- **Implementations:** found through `ServiceLoader`, like plugins.
+- **Benefits:** the Anthropic SDK and its OkHttp, Jackson and Kotlin
+  dependencies stay out of the core library; plugins don't depend on any
+  provider; and tests can substitute fakes.
+
+**`ClaudeAssistant`** follows the Claude API guidance at the time of
+writing:
+- **Model:** Claude Opus 5.5 (`claude-opus-5-5`). Override it with
+  `-Ddframework.ai.model`.
+- **Effort:** set explicitly to medium (`BetaOutputConfig`), which suits
+  short explanations. Thinking is left at the model's adaptive default.
+- **Streaming,** so the text appears as it's written, with `max_tokens`
+  64,000.
+- **Refusal fallback:** server-side, via the `server-side-fallback-2026-07-01`
+  beta and `fallbacks: "default"`, sent with `putAdditionalBodyProperty`. A
+  request declined by a safety classifier is rerouted rather than simply
+  failing; a final `refusal` stop reason becomes `AiException.Kind.REFUSED`.
+- **Error mapping:** typed SDK exceptions are caught most-specific first
+  (`UnauthorizedException`/`PermissionDeniedException`, `NotFoundException`,
+  `RateLimitException`, `AnthropicServiceException`, `AnthropicIoException`)
+  and turned into user-facing `AiException`s.
+- **Credentials:** the SDK's own resolution (`AnthropicOkHttpClient.fromEnv()`).
+  `setupHint()` checks the environment variables and the `ant auth login`
+  profile directory the SDK reads, so the UI can explain setup *before*
+  anything is sent.
+
+**Cancelling.** The first version checked for an interrupt between
+streamed events. While the model thinks, there can be seconds with no
+events, so Stop would have seemed to do nothing and the request would have
+carried on using tokens. A shared daemon watchdog now checks the calling
+thread every 200 ms and closes the stream as soon as it's interrupted,
+which aborts the HTTP read. Because the stream is closed from another
+thread it's managed with an explicit `finally` rather than
+try-with-resources: javac's `try` lint rightly flags an explicit `close()`
+on a resource variable.
+
+**The DNS Dig prompt** (`DigExplainPrompt`):
+- **Treated as data:** dig's output is wrapped in `<dig_output>` tags, and
+  the system instructions say it is data whose embedded instructions must
+  never be followed. TXT records are arbitrary text from the internet, and a
+  test pins that hostile text stays inside the tags.
+- **Too long to send:** outputs over 100,000 characters are refused with a
+  suggestion (narrow the query) rather than silently cut short.
+- **Plain text:** the answer is plain text with "- " bullets, because it's
+  shown in a `JTextArea`.
+
+**Transparency and audit**, in line with DNS Dig's "under the hood" ethos:
+- the tab names the model and says where the data goes
+- the exact prompt is shown, in a collapsible section
+- every explanation is audited (`action: "explain"`) with the model, the
+  model that actually answered, prompt size, tokens, duration and outcome
+- when no credentials are set, nothing is sent and nothing is audited
+
+**Testing without a key or a bill.** `ClaudeAssistantTest` runs the real
+SDK against a local fake of the Messages API: the JDK's
+`com.sun.net.httpserver`, serving server-sent events. It checks:
+- **the request:** model, `stream: true`, effort, `fallbacks`, the beta
+  header, and the system and user text
+- **streaming:** text arrives piece by piece, with usage counts
+- **error mapping:** refusal, 401 and 429
+- **cancelling:** stops within 1.5 seconds even with two-second gaps
+  between events
+
+The same fake, given to the demo through `ANTHROPIC_BASE_URL`, was used for
+the end-to-end check of the button, tab, footer and audit. No live API call
+was made during development, because this machine has no API key.
+
 ---
 
 ## 7. Testing strategy
 
-**195 tests**, all run by `./gradlew build`.
+**211 tests**, all run by `./gradlew build`.
 
 ### Headless first
 
@@ -1061,6 +1139,7 @@ static void requireDisplay() {
 | reading the palette UI | package-private `search()`, `setQuery()` and `runSelected()` |
 | finding plugins | a test `META-INF/services` file registering a working plugin and one that throws on start-up |
 | running dig | `echo` and `sleep` in place of dig (`DigRunnerTest`), and real dig output saved as fixtures (`DigOutputTest`) |
+| calling Claude | a local fake Messages API serving server-sent events (`ClaudeAssistantTest`), and stand-in assistants (`DigExplainPanelTest`) |
 
 ### Regression tests pin every bug found
 
@@ -1136,6 +1215,11 @@ several problems the unit tests couldn't:
 - **DNS Dig depends on dig's text output**, which isn't a formal
   interface. The parser is lenient and tested against dig 9.18; other
   major versions may need new fixtures.
+- **AI explanations need an API key, cost money and leave the machine.**
+  Each one is a paid API call that sends the command and dig's output to
+  Anthropic, so the tab discloses this and the audit records it. The model's
+  explanation is not checked against the data; it's an aid, not an
+  authority.
 - **The audit log never rotates.** It grows until someone archives it.
   Rotation, or handing records to the platform's logging, is a possible
   addition.

@@ -1,10 +1,12 @@
 package com.dframework.swing.plugin;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.prefs.Preferences;
 
 import javax.swing.JComponent;
 
+import com.dframework.swing.ai.AiAssistant;
 import com.dframework.swing.audit.AuditLog;
 import com.dframework.swing.command.Command;
 
@@ -30,4 +32,12 @@ public interface PluginContext {
 
     /** Adds a command to the window's command palette, if it has one. */
     void addCommand(Command command);
+
+    /**
+     * The AI assistant the host offers, if any (for example, Claude, when the
+     * {@code dframework-ai} module is on the classpath).
+     */
+    default Optional<AiAssistant> ai() {
+        return Optional.empty();
+    }
 }

@@ -46,6 +46,9 @@ public final class DigPlugin implements DPlugin {
         context.addCommand(Command.of("DNS Dig", "Run Lookup", view::run));
         context.addCommand(Command.of("DNS Dig", "Copy Command", view::copyCommand));
         context.addCommand(Command.of("DNS Dig", "Show or Hide Under the Hood", view::toggleUnderTheHood));
+        if (view.canExplain()) {
+            context.addCommand(Command.of("DNS Dig", "Explain Result with AI", view::explainResult));
+        }
         return view;
     }
 

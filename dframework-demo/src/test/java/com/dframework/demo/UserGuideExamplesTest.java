@@ -32,6 +32,7 @@ class UserGuideExamplesTest {
 
     private static final String IMPORTS = """
             import com.dframework.swing.*;
+            import com.dframework.swing.ai.*;
             import com.dframework.swing.audit.*;
             import com.dframework.swing.busy.*;
             import com.dframework.swing.button.*;
@@ -51,6 +52,7 @@ class UserGuideExamplesTest {
             import java.time.Duration;
             import java.util.List;
             import java.util.Map;
+            import java.util.Optional;
             import java.util.prefs.Preferences;
             import javax.swing.*;
             import javax.swing.table.*;
@@ -67,6 +69,7 @@ class UserGuideExamplesTest {
                 DOutlookBar navBar; Action undoAction; DCommandPalette palette; JComponent network; DToggleSwitch wifi;
                 JComponent callsScreen; Repository repository; DBusyPanel busy; List<String> rows;
                 JComponent commandPanel; DOutlookBar nav; CardLayout cards; JPanel screens;
+                PluginContext context; String output;
 
                 interface Session { void logout(); }
                 interface CustomerList { void filter(String query); }

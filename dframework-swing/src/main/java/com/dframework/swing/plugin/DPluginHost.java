@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.function.Consumer;
@@ -14,6 +15,7 @@ import java.util.prefs.Preferences;
 
 import javax.swing.JComponent;
 
+import com.dframework.swing.ai.AiAssistant;
 import com.dframework.swing.audit.AuditLog;
 import com.dframework.swing.command.Command;
 import com.dframework.swing.command.DCommandPalette;
@@ -42,6 +44,7 @@ public final class DPluginHost {
     private final AuditLog auditLog;
     private final Preferences settingsRoot;
     private final List<DPluginPane> panes = new ArrayList<>();
+    private Optional<AiAssistant> ai = AiAssistant.discover();
 
     /** A host recording to {@link AuditLog#getDefault()}. */
     public DPluginHost() {
@@ -94,6 +97,19 @@ public final class DPluginHost {
         DPluginPane pane = new DPluginPane(plugin, Context::new);
         panes.add(pane);
         return pane;
+    }
+
+    /**
+     * Sets the AI assistant offered to plugins, replacing the one found on the
+     * classpath; {@code null} offers none.
+     */
+    public void setAiAssistant(AiAssistant assistant) {
+        this.ai = Optional.ofNullable(assistant);
+    }
+
+    /** The AI assistant offered to plugins, if any. */
+    public Optional<AiAssistant> getAiAssistant() {
+        return ai;
     }
 
     /** Every pane this host has mounted. */
@@ -166,6 +182,11 @@ public final class DPluginHost {
         @Override
         public void addCommand(Command command) {
             DCommandPalette.of(pane).ifPresent(palette -> palette.addCommand(command));
+        }
+
+        @Override
+        public Optional<AiAssistant> ai() {
+            return ai;
         }
     }
 }

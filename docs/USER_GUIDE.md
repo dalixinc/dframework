@@ -952,6 +952,7 @@ the plugin's lifecycle.
 | `audit(action, details)` | an audit entry with the plugin's id as the source |
 | `preferences()` | the plugin's own saved settings, kept between runs |
 | `addCommand(command)` | a command in the window's palette |
+| `ai()` | the host's AI assistant, if one is installed (see below) |
 
 ### Hosting plugins
 
@@ -976,6 +977,32 @@ Runtime.getRuntime().addShutdownHook(new Thread(host::disposeAll));
 
 > Plugins run with the same permissions as the host application, as ActiveX
 > controls did. Only install plugins you trust.
+
+### AI assistance: `AiAssistant`
+
+A host can offer plugins an AI model through `PluginContext.ai()`. The
+library defines only a small `AiAssistant` interface. The `dframework-ai`
+module provides one backed by Claude, and like plugins it's found
+automatically when it's on the classpath.
+
+```java
+Optional<AiAssistant> ai = context.ai();
+if (ai.isPresent() && ai.get().setupHint().isEmpty()) {
+    AiAnswer answer = ai.get().ask(
+            new AiPrompt("You explain ping results in plain English.", "Explain this:\n" + output),
+            text -> System.out.print(text));    // called as the answer is written
+    context.audit("explain", Map.of("model", answer.model(), "outputTokens", answer.outputTokens()));
+}
+```
+
+- `ask` blocks until the answer is complete, so call it off the Swing
+  thread (a `SwingWorker` or `DBusyPanel.run`). Interrupting the thread
+  stops the request.
+- `setupHint()` says what the user must do first, such as set an API key,
+  so you can show it instead of failing.
+- Failures arrive as `AiException`, with a message written for the user
+  and a `kind()`: not set up, rejected key, rate limited, network, refused
+  or cancelled.
 
 ---
 
@@ -1003,6 +1030,36 @@ it's doing.
   records are grouped by the server that returned them
   (`Hop 2 · a.root-servers.net (20 ms)`).
 - **Raw output:** dig's own text, shown as it arrives.
+
+**Explain with AI**
+
+After a lookup, **Explain with AI** asks Claude to explain the result in
+plain English: what was asked, what the records mean, anything worth
+checking, and sometimes a follow-up command to try.
+- **Streaming:** the explanation appears in the **AI explanation** tab as
+  it's written. **Stop** cancels it.
+- **Footer:** shows the model that answered, the tokens used and the time
+  taken.
+- **What was sent to Claude** (collapsible) shows the exact instructions
+  and data sent.
+- **Disclosure:** the tab says plainly that explaining sends the command and
+  dig's output to Anthropic.
+- **Audit:** every explanation is recorded in the audit log with the model,
+  tokens and outcome.
+
+To set it up, give the application an Anthropic API key (from
+[console.anthropic.com](https://console.anthropic.com)) and restart:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+./gradlew :dframework-demo:run
+```
+
+Until then, the button explains what to do instead, and nothing is sent.
+Explanations use Claude Opus 5.5 at medium effort. A typical explanation is
+around a thousand tokens in and a few hundred out, a cent or two. To
+use another model, start the application with
+`-Ddframework.ai.model=<model id>`.
 
 **Under the hood** (collapsible, and it stays closed if you close it)
 - **The exact command** that runs when you press Dig. It updates as you
@@ -1145,6 +1202,10 @@ does.
 `~/.dframework/audit.log` unless you move it (see [chapter 17](#17-the-audit-log-auditlog)).
 Each line is one JSON record, so it reads easily with `jq`, for example
 `jq 'select(.source == "com.dframework.dig")' ~/.dframework/audit.log`.
+
+**The "Explain with AI" button says Claude isn't set up.**
+Set the `ANTHROPIC_API_KEY` environment variable (or run `ant auth login`)
+and restart the application. Without credentials, nothing is ever sent.
 
 **How do I translate DFramework's messages?**
 Add `com/dframework/swing/messages_<lang>.properties` to your classpath
