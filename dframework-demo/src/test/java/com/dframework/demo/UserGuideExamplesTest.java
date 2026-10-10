@@ -41,6 +41,7 @@ class UserGuideExamplesTest {
             import com.dframework.swing.exec.*;
             import com.dframework.swing.dialog.*;
             import com.dframework.swing.field.*;
+            import com.dframework.swing.graph.*;
             import com.dframework.swing.nav.*;
             import com.dframework.swing.nav.DBreadcrumbBar.Crumb;
             import com.dframework.swing.notify.*;
@@ -51,6 +52,7 @@ class UserGuideExamplesTest {
             import com.dframework.swing.util.*;
             import java.awt.*;
             import java.time.Duration;
+            import java.time.Instant;
             import java.util.List;
             import java.util.Map;
             import java.util.Optional;

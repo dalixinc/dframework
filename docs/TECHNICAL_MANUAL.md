@@ -161,6 +161,7 @@ graph LR
 | `dialog` | `MessageIcons`, `MessageType` |
 | `field` | `DTextField`, `Validator`, `InputFilter`, `FocusHighlighter`, `DSearchField` |
 | `table` | `DTable`, `DTablePanel`, `TableFilter` *(package-private)* |
+| `graph` | `DCommitGraph`, `GraphCommit`, `CommitGraph` |
 | `nav` | `DOutlookBar`, `DBreadcrumbBar` |
 | `command` | `DCommandPalette`, `Command`, `FuzzyMatcher` *(package-private)* |
 | `notify` | `DToast` |
@@ -1165,6 +1166,66 @@ on one `SwingWorker`, and each is audited as it completes.
 and declares it data: commit messages, file contents and branch names are
 written by other people. Output over 100,000 characters is refused with a
 suggestion to lower the limit.
+
+**The Graph tab.** It draws the graph itself from one `git log` rather than
+showing `git log --graph`'s ASCII art.
+- **The format:** `--format=%H%x1f%P%x1f%D%x1f%an%x1f%at%x1f%s`. The ASCII
+  unit separator (0x1F) can't appear in names or subjects, so subjects
+  containing `|`, `,` or tabs parse correctly.
+- **Refs:** `--decorate=full` names refs unambiguously (`refs/heads/`,
+  `refs/remotes/`, `refs/tags/`). A local branch called `feature/x` and a
+  remote branch `origin/x` can't be told apart from short names.
+  `origin/HEAD` is dropped because it only repeats the remote's default
+  branch.
+- **The AI explanation** gets a readable summary (short id, refs, subject,
+  parents, author) rather than the separator-delimited text.
+- **Opening a commit** double-clicks through to the Objects tab, so the
+  graph and git's object storage are one click apart.
+
+### 6.23 `DCommitGraph` and `CommitGraph`
+
+**Layout and painting are separate.** `CommitGraph.layout` is a pure
+function from commits to rows, unit-tested without any Swing. `DCommitGraph`
+only paints rows.
+
+**The lane algorithm.** It is the same idea as gitk and `git log --graph`.
+A list of lanes records which commit each line of history is heading for.
+For each commit, in order:
+1. **Its lane:** the lane heading for it, or the first free lane if it's a
+   branch tip.
+2. **Upper half:** other lanes heading for the same commit (several
+   children) bend into its dot. The rest pass straight through.
+3. **Lower half:** the first parent continues in the commit's lane. Each
+   further parent of a merge gets a line to its lane, which is claimed if
+   it's new.
+
+Two choices keep it readable:
+- **Lines drift left.** When the first parent is already expected in
+  another lane, the right-hand of the two lines bends into the left-hand
+  one. That keeps the main line in lane 0. The first version always bent
+  the commit's own line, and the main line wandered right. A test pins the
+  behaviour.
+- **Branches keep their colour until they join.** A bend takes the colour
+  of the branch it comes from, not the one it joins, so a branch stays
+  visible right up to its fork point.
+
+Freed lanes are reused, and trailing free lanes are dropped, so the graph
+stays narrow. Lanes in the middle aren't compacted, because shifting lines
+sideways mid-history makes them harder to follow.
+
+**Painting.** Each row is a cell. A row's lines are drawn as top-to-middle
+and middle-to-bottom segments, and a segment that changes lane is a cubic
+curve. Segments run one pixel past the cell edge: with anti-aliasing, lines
+ending exactly at the edge left a faint seam between rows. The dot has a
+ring in the cell background colour, so it stands out on selected and
+striped rows.
+
+**Badges** are drawn as one `Icon` on the description label. The label then
+lays them out before the text, and `DTable`'s striping, selection and
+tooltips keep working unchanged.
+
+**No sorting.** Order is meaning in a graph, so the row sorter is removed
+and filtering is not offered.
 
 ---
 

@@ -26,6 +26,7 @@ import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
@@ -46,6 +47,8 @@ import com.dframework.swing.exec.CommandLines;
 import com.dframework.swing.exec.CommandRunner;
 import com.dframework.swing.exec.DCommandPane;
 import com.dframework.swing.field.DTextField;
+import com.dframework.swing.graph.DCommitGraph;
+import com.dframework.swing.graph.GraphCommit;
 import com.dframework.swing.nav.DBreadcrumbBar;
 import com.dframework.swing.nav.DBreadcrumbBar.Crumb;
 import com.dframework.swing.panel.DCollapsiblePane;
@@ -93,7 +96,18 @@ final class GitView extends JPanel {
     private final CardLayout objectCards = new CardLayout();
     private final JPanel objectContent = new JPanel(objectCards);
 
+    // Graph tab
+    private final DCommitGraph graph = new DCommitGraph();
+    private final JCheckBox allBranches = new JCheckBox("All branches", true);
+    private final JSpinner graphLimit = new JSpinner(new SpinnerNumberModel(500, 1, 10_000, 100));
+    private final JButton refreshGraph = new JButton("Refresh");
+    private final JLabel graphStatus = new JLabel(" ");
+    private transient Path graphShows;   // the repository the graph was last drawn for
+
     private final JTabbedPane tabs = new JTabbedPane();
+    private final JComponent commandsTab;
+    private final JComponent graphTab;
+    private final JComponent objectsTab;
     private final JButton explain = new JButton("Explain with AI");
     private final transient DExplainPane explainPane;
     private final DCommandPane commandPane;
@@ -114,17 +128,24 @@ final class GitView extends JPanel {
         this.explainPane = context.ai()
                 .map(ai -> new DExplainPane(ai, context.auditLog(), context.plugin().id(), context.preferences()))
                 .orElse(null);
-        this.commandPane = new DCommandPane(context.auditLog(), context.plugin().id(), "open", "run", "inspect");
+        this.commandPane = new DCommandPane(context.auditLog(), context.plugin().id(), "open", "run", "graph", "inspect");
         setBorder(BorderFactory.createEmptyBorder(4, 12, 12, 12));
 
         add(repositoryBar(), BorderLayout.NORTH);
-        tabs.addTab("Commands", commandsTab());
-        tabs.addTab("Objects", objectsTab());
+        commandsTab = commandsTab();
+        graphTab = graphTab();
+        objectsTab = objectsTab();
+        tabs.addTab("Commands", commandsTab);
+        tabs.addTab("Graph", graphTab);
+        tabs.addTab("Objects", objectsTab);
         if (explainPane != null) {
             tabs.addTab("AI explanation", explainPane);
             explainPane.setOnStateChange(this::updateButtons);
         }
-        tabs.addChangeListener(e -> updatePreview());
+        tabs.addChangeListener(e -> {
+            updatePreview();
+            loadGraphIfNeeded();
+        });
         add(tabs, BorderLayout.CENTER);
 
         underTheHood = new DCollapsiblePane("Under the hood", commandPane);
@@ -214,6 +235,38 @@ final class GitView extends JPanel {
         return tab;
     }
 
+    private JComponent graphTab() {
+        graph.setToolTipText("");   // tooltips come from DCommitGraph.getToolTipText
+        graph.addOpenListener(commit -> {
+            object.setText(commit.id());
+            trail.setPath(Crumb.of(commit.id().substring(0, Math.min(7, commit.id().length())), commit.id()));
+            inspect(commit.id(), false);
+        });
+        allBranches.setToolTipText("Include every branch and tag, not just the current branch's history");
+        graphLimit.setToolTipText("How many commits to draw, newest first");
+        refreshGraph.setToolTipText("Run git log again");
+        allBranches.addActionListener(e -> {
+            updatePreview();
+            loadGraph();
+        });
+        refreshGraph.addActionListener(e -> loadGraph());
+
+        JPanel form = new JPanel(new FlowLayout(FlowLayout.LEADING, 8, 0));
+        form.add(allBranches);
+        form.add(new JLabel("Limit"));
+        form.add(graphLimit);
+        form.add(refreshGraph);
+        JPanel top = new JPanel(new BorderLayout(0, 4));
+        top.add(form, BorderLayout.CENTER);
+        top.add(graphStatus, BorderLayout.SOUTH);
+
+        JPanel tab = new JPanel(new BorderLayout(0, 6));
+        tab.setBorder(BorderFactory.createEmptyBorder(8, 4, 4, 4));
+        tab.add(top, BorderLayout.NORTH);
+        tab.add(new JScrollPane(graph), BorderLayout.CENTER);
+        return tab;
+    }
+
     private JComponent objectsTab() {
         object.setInputFilter(GitInput.objectFilter());
         object.setValidator(GitInput.objectValidator());
@@ -280,6 +333,7 @@ final class GitView extends JPanel {
         value.getDocument().addDocumentListener(preview);
         object.getDocument().addDocumentListener(preview);
         limit.addChangeListener(e -> updatePreview());
+        graphLimit.addChangeListener(e -> updatePreview());
         preset.addActionListener(e -> presetChanged());
         run.addActionListener(e -> runPreset());
         value.addActionListener(e -> runPreset());
@@ -343,6 +397,7 @@ final class GitView extends JPanel {
                 context.preferences().put("repository", root.toString());
                 updatePreview();
                 updateButtons();
+                loadGraphIfNeeded();
             });
         });
     }
@@ -421,7 +476,7 @@ final class GitView extends JPanel {
         String display = display(command);
         output.setText("$ " + display + "\n\n");
         setStatus(status.getForeground(), "Running…");
-        tabs.setSelectedIndex(0);
+        tabs.setSelectedComponent(commandsTab);
         execute(List.of(new Step("run", command, p.label(), output)), outcomes -> {
             CommandRunner.Outcome outcome = outcomes.get(0);
             lastOutput = new LastOutput(display, outcome.exitCode(), outcome.lines());
@@ -438,6 +493,74 @@ final class GitView extends JPanel {
                                 ? "  ·  output stopped at " + count(outcome.lines().size(), "line") : ""));
             }
         });
+    }
+
+    // ---- graph tab ----------------------------------------------------------------------------
+
+    /** Draws the graph when its tab is showing and it doesn't already show the open repository. */
+    private void loadGraphIfNeeded() {
+        if (tabs.getSelectedComponent() == graphTab && repository != null && !repository.equals(graphShows)) {
+            loadGraph();
+        }
+    }
+
+    /** Runs git log and draws the commit graph. */
+    void loadGraph() {
+        if (busy || !gitAvailable) {
+            return;
+        }
+        if (repository == null) {
+            setGraphStatus(BAD, "Open a repository first.");
+            return;
+        }
+        int max = (Integer) graphLimit.getValue();
+        List<String> command = GitLog.command(repository, allBranches.isSelected(), max);
+        Path repo = repository;
+        setGraphStatus(status.getForeground(), "Reading the history…");
+        execute(List.of(new Step("graph", command, "Commit graph", null)), outcomes -> {
+            CommandRunner.Outcome outcome = outcomes.get(0);
+            graphShows = repo;
+            if (outcome.cancelled()) {
+                setGraphStatus(BAD, "Stopped after " + outcome.durationMs() + " ms.");
+                return;
+            }
+            if (outcome.exitCode() != 0) {
+                graph.setCommits(List.of());
+                boolean empty = outcome.lines().stream().anyMatch(l -> l.contains("does not have any commits"));
+                setGraphStatus(empty ? status.getForeground() : BAD, empty ? "No commits yet."
+                        : "git reported an error (exit code " + outcome.exitCode() + "): " + lastLine(outcome));
+                return;
+            }
+            List<GraphCommit> commits = GitLog.parse(outcome.lines());
+            graph.setCommits(commits);
+            long merges = commits.stream().filter(GraphCommit::isMerge).count();
+            setGraphStatus(GOOD, count(commits.size(), "commit") + "  ·  " + count((int) merges, "merge")
+                    + "  ·  " + outcome.durationMs() + " ms"
+                    + (commits.size() >= max ? "  ·  limit reached: raise Limit to see older commits" : "")
+                    + "  ·  double-click a commit to inspect it");
+            lastOutput = new LastOutput(display(command), outcome.exitCode(), describe(commits));
+            updateButtons();
+        });
+    }
+
+    /** The graph as readable lines, for the AI explanation (not the raw separator-delimited output). */
+    private static List<String> describe(List<GraphCommit> commits) {
+        List<String> lines = new ArrayList<>();
+        for (GraphCommit c : commits) {
+            String refs = c.refs().isEmpty() ? ""
+                    : " (" + String.join(", ", c.refs().stream().map(r -> r.kind() == GraphCommit.Kind.TAG ? "tag: " + r.name()
+                            : r.kind() == GraphCommit.Kind.HEAD ? "HEAD -> " + r.name() : r.name()).toList()) + ")";
+            String parents = c.parents().stream().map(id -> id.substring(0, Math.min(7, id.length())))
+                    .reduce((a, b) -> a + " " + b).orElse("none");
+            lines.add(c.id().substring(0, Math.min(7, c.id().length())) + refs + " " + c.subject()
+                    + "  [parents: " + parents + "; " + c.author() + "]");
+        }
+        return lines;
+    }
+
+    private void setGraphStatus(Color colour, String text) {
+        graphStatus.setForeground(colour);
+        graphStatus.setText(text);
     }
 
     // ---- objects tab ------------------------------------------------------------------------
@@ -468,7 +591,7 @@ final class GitView extends JPanel {
             }
             trail.setPath(Crumb.of(spec, spec));
         }
-        tabs.setSelectedIndex(1);
+        tabs.setSelectedComponent(objectsTab);
         objectHeader.setText("Inspecting " + spec + "…");
         links.removeAll();
         Path repo = repository;
@@ -669,6 +792,7 @@ final class GitView extends JPanel {
         boolean explaining = explainPane != null && explainPane.isRunning();
         run.setEnabled(gitAvailable && !busy);
         inspect.setEnabled(gitAvailable && !busy);
+        refreshGraph.setEnabled(gitAvailable && !busy);
         stop.setEnabled(busy || explaining);
         explain.setEnabled(lastOutput != null && !busy && !explaining);
     }
@@ -677,7 +801,11 @@ final class GitView extends JPanel {
     String previewCommand() {
         Path repo = repository != null ? repository
                 : Path.of(repositoryField.getText().isBlank() ? "REPOSITORY" : repositoryField.getText().strip());
-        if (tabs.getSelectedIndex() == 1) {
+        if (tabs.getSelectedComponent() == graphTab) {
+            commandPane.setCaption("This is the command that draws the graph:");
+            return display(GitLog.command(repo, allBranches.isSelected(), (Integer) graphLimit.getValue()));
+        }
+        if (tabs.getSelectedComponent() == objectsTab) {
             String spec = object.getText().strip();
             commandPane.setCaption("This is the command that shows an object's content (Inspect also runs rev-parse"
                     + " and cat-file -t and -s first):");
@@ -713,13 +841,20 @@ final class GitView extends JPanel {
         }
         limit.setValue(p.getInt("limit", 50));
         object.setText(p.get("object", "HEAD"));
+        allBranches.setSelected(p.getBoolean("graph.allBranches", true));
+        graphLimit.setValue(p.getInt("graph.limit", 500));
+        allBranches.addActionListener(e -> p.putBoolean("graph.allBranches", allBranches.isSelected()));
+        graphLimit.addChangeListener(e -> p.putInt("graph.limit", (Integer) graphLimit.getValue()));
         preset.addActionListener(e -> p.put("preset", ((GitPreset) preset.getSelectedItem()).name()));
         limit.addChangeListener(e -> p.putInt("limit", (Integer) limit.getValue()));
         object.addActionListener(e -> p.put("object", object.getText().strip()));
     }
 
     void focusFirstField() {
-        (repository == null ? repositoryField : tabs.getSelectedIndex() == 1 ? object : value).requestFocusInWindow();
+        JComponent target = repository == null ? repositoryField
+                : tabs.getSelectedComponent() == objectsTab ? object
+                : tabs.getSelectedComponent() == graphTab ? graph : value;
+        target.requestFocusInWindow();
     }
 
     void dispose() {

@@ -586,6 +586,39 @@ search.setSearchDelay(250);   // milliseconds; 0 = every keystroke
 Enter searches straight away. <kbd>Esc</kbd> clears the box, or passes
 through to the dialog when the box is already empty.
 
+### `DCommitGraph`: history as a graph
+
+A `DTable` that draws a commit history the way `git log --graph` does. It
+shows coloured lanes, lines that split at branches and join at merges, and
+badges for branches, tags and HEAD. Each row also shows the commit's
+description, author, date and short id. It knows nothing about git: give it
+`GraphCommit` records (id, parent ids, refs, subject, author, time), with
+children before parents.
+
+```java
+GraphCommit first = new GraphCommit("a1", List.of(), List.of(new GraphCommit.Ref("v1.0", GraphCommit.Kind.TAG)),
+        "First commit", "Dale", Instant.parse("2026-01-01T10:00:00Z"));
+GraphCommit next = new GraphCommit("b2", List.of("a1"), List.of(new GraphCommit.Ref("main", GraphCommit.Kind.HEAD)),
+        "Second commit", "Dale", Instant.parse("2026-01-02T10:00:00Z"));
+
+DCommitGraph graph = new DCommitGraph();
+graph.setCommits(List.of(next, first));                          // children first
+graph.addOpenListener(commit -> System.out.println(commit.id())); // double-click or Enter
+JScrollPane scroller = new JScrollPane(graph);
+```
+
+- **Fixed order:** the rows keep the order you give, so clicking a header
+  doesn't sort.
+- **Badge colours:** HEAD (the checked-out branch, in bold) is dark green,
+  local branches green, remote branches purple, tags amber, and anything
+  else grey.
+- **Tooltips:** hovering over a row shows the full id, author, date and
+  refs.
+- **Missing parents:** a parent that isn't in the list, because the history
+  was cut off, gets a line running off the bottom.
+- **Lane colours:** `setLaneColours` changes the colours the lanes cycle
+  through.
+
 ---
 
 ## 10. Navigation: `DOutlookBar`
@@ -1158,6 +1191,23 @@ walk them:
     2 MB, are summarised rather than shown.
 - A breadcrumb trail (`HEAD › tree 569ee81 › README.md`) lets you step back.
 
+**Graph tab: the commit graph.** The tab draws the history as a graph, with
+branches splitting off and merging back, and badges for branches, tags,
+remote branches and HEAD. It's drawn the first time you open the tab, and
+again for each repository you open.
+- **All branches:** on by default. Turn it off to see only the current
+  branch's history.
+- **Limit:** how many commits to draw, newest first. The default is 500.
+  The status line says when the limit was reached.
+- **Refresh:** runs the command again.
+- **Opening a commit:** double-click a commit, or select it and press Enter,
+  to open it in the Objects tab.
+
+It runs one command, shown under the hood and audited as *graph*:
+`git log --all --topo-order --decorate=full -n 500 --format=…`.
+`--topo-order` puts every commit after all its children, which the drawing
+needs.
+
 Each inspection runs four commands, all shown and audited:
 `rev-parse --verify` (the full id), `cat-file -t` (type), `cat-file -s`
 (size) and `cat-file -p` (content).
@@ -1175,11 +1225,11 @@ Each inspection runs four commands, all shown and audited:
 
 **Under the hood** shows the next command exactly as it runs, environment
 variables included, ready to **Copy** into a terminal. It also lists every
-command run this session, marked *open*, *run* or *inspect*; hover over one
+command run this session, marked *open*, *run*, *graph* or *inspect*; hover over one
 to see it in full.
 
 **Explain with AI** (when an AI assistant is installed) explains the last
-output: a log, a status, a blame, a commit or a tree. As with DNS Dig, the
+output: a log, a status, a blame, the graph, a commit or a tree. As with DNS Dig, the
 tab says what is sent, shows the exact prompt, and audits the request.
 Commit messages and file contents are passed to the model as data, never as
 instructions.

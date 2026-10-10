@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.dframework.swing.exec.CommandRunner;
+import com.dframework.swing.graph.CommitGraph;
+import com.dframework.swing.graph.GraphCommit;
 
 /** Runs the browser's commands with real git against a throwaway repository. */
 class GitIntegrationTest {
@@ -93,5 +96,37 @@ class GitIntegrationTest {
 
         assertThat(outcome.exitCode()).isNotZero();
         assertThat(target).doesNotExist();
+    }
+
+    @Test
+    void theGraphLogParsesABranchAndAMerge() throws Exception {
+        String[] who = {"-c", "user.name=Test", "-c", "user.email=test@example.com"};
+        git("checkout", "-q", "-b", "feature");
+        Files.writeString(repo.resolve("feature.txt"), "new\n");
+        git("add", ".");
+        git(concat(who, "commit", "-q", "-m", "Add feature"));
+        git("checkout", "-q", "main");
+        Files.writeString(repo.resolve("main.txt"), "main\n");
+        git("add", ".");
+        git(concat(who, "commit", "-q", "-m", "Work on main"));
+        git(concat(who, "merge", "-q", "--no-ff", "-m", "Merge feature", "feature"));
+
+        List<GraphCommit> commits = GitLog.parse(run(GitLog.command(repo, true, 50)).lines());
+
+        // Children before parents; git chooses which side of the merge comes first.
+        assertThat(commits).extracting(GraphCommit::subject)
+                .containsExactlyInAnyOrder("Merge feature", "Work on main", "Add feature", "First commit")
+                .startsWith("Merge feature").endsWith("First commit");
+        assertThat(commits.get(0).isMerge()).isTrue();
+        assertThat(commits.get(0).refs()).extracting(GraphCommit.Ref::name).containsExactly("main");
+        assertThat(commits.get(3).refs()).extracting(GraphCommit.Ref::name).containsExactly("v1.0");
+        assertThat(CommitGraph.maxWidth(CommitGraph.layout(commits)))
+                .isEqualTo(2);
+    }
+
+    private static String[] concat(String[] first, String... rest) {
+        String[] all = Arrays.copyOf(first, first.length + rest.length);
+        System.arraycopy(rest, 0, all, first.length, rest.length);
+        return all;
     }
 }
