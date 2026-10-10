@@ -3,11 +3,13 @@ package com.dframework.git;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
@@ -25,18 +27,23 @@ import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
+import javax.swing.ComboBoxEditor;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -86,6 +93,11 @@ final class GitView extends JPanel {
 
     // Objects tab
     private final DTextField object = new DTextField(30);
+    private final JComboBox<ObjectChoice> objectChoices = new JComboBox<>();
+    private final transient List<String> recentObjects = new ArrayList<>();
+    private transient List<String> refNames = List.of();
+    private transient boolean updatingChoices;
+    private transient boolean inspectPending;
     private final JButton inspect = new JButton("Inspect");
     private final DBreadcrumbBar trail = new DBreadcrumbBar();
     private final JLabel objectHeader = new JLabel(" ");
@@ -267,6 +279,129 @@ final class GitView extends JPanel {
         return tab;
     }
 
+    /**
+     * The Object box: an editable dropdown, so you can type any object or pick
+     * a recent one, a HEAD shortcut, a branch or tag, or a commit from the graph.
+     * The editor is the DTextField, so filtering and validation still apply.
+     */
+    private JComponent objectChooser() {
+        objectChoices.setEditable(true);
+        objectChoices.setEditor(new FieldEditor(object));
+        objectChoices.setMaximumRowCount(16);
+        objectChoices.setPrototypeDisplayValue(new ObjectChoice("HEAD:docs/a-longer-file-name.md", ""));
+        // Arrow keys move through the list without inspecting each entry; Enter or a click picks one.
+        objectChoices.putClientProperty("JComboBox.isTableCellEditor", Boolean.TRUE);
+        objectChoices.setRenderer(new DefaultListCellRenderer() {
+            @Serial
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected,
+                    boolean focused) {
+                super.getListCellRendererComponent(list, value, index, selected, focused);
+                if (value instanceof ObjectChoice choice) {
+                    String dim = selected ? "" : " color='gray'";
+                    setText("<html><nobr>" + escape(choice.label()) + "&nbsp;&nbsp;<font" + dim + ">"
+                            + escape(choice.description()) + "</font></nobr></html>");
+                    setToolTipText(choice.spec());
+                }
+                return this;
+            }
+        });
+        objectChoices.addActionListener(e -> {
+            if (!updatingChoices && objectChoices.getSelectedItem() instanceof ObjectChoice) {
+                requestInspect();
+            }
+        });
+        object.addActionListener(e -> requestInspect());
+        // The combo box draws the border, so show the field's error outline on it.
+        object.addPropertyChangeListener(DTextField.INPUT_VALID_PROPERTY, e -> objectChoices.putClientProperty(
+                "JComponent.outline", object.isShowingError() ? "error" : null));
+        refreshChoices();
+        return objectChoices;
+    }
+
+    /**
+     * Inspects what the Object box shows, once, after Swing has finished
+     * handling the event. Enter and choosing from the list can both fire for
+     * one action, and the box only shows the chosen entry afterwards.
+     */
+    private void requestInspect() {
+        if (inspectPending) {
+            return;
+        }
+        inspectPending = true;
+        SwingUtilities.invokeLater(() -> {
+            inspectPending = false;
+            objectChoices.hidePopup();
+            String spec = object.getText().strip();
+            if (!spec.isEmpty()) {
+                inspect(spec, true);
+            }
+        });
+    }
+
+    /** Rebuilds the dropdown from recent objects, refs and the graph, keeping what's typed. */
+    private void refreshChoices() {
+        String typed = object.getText();
+        updatingChoices = true;
+        try {
+            List<ObjectChoice> choices = ObjectChoice.build(recentObjects, refNames, graph.getCommits());
+            objectChoices.setModel(new DefaultComboBoxModel<>(choices.toArray(new ObjectChoice[0])));
+            objectChoices.setSelectedIndex(-1);
+        } finally {
+            updatingChoices = false;
+        }
+        object.setText(typed);
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    /** Uses a DTextField as the combo box's editor. */
+    private static final class FieldEditor implements ComboBoxEditor {
+
+        private final DTextField field;
+
+        FieldEditor(DTextField field) {
+            this.field = field;
+        }
+
+        @Override
+        public Component getEditorComponent() {
+            return field;
+        }
+
+        @Override
+        public void setItem(Object item) {
+            if (item != null) {   // null comes from clearing the selection: keep what's typed
+                field.setText(item.toString());
+            }
+        }
+
+        @Override
+        public Object getItem() {
+            return field.getText();
+        }
+
+        @Override
+        public void selectAll() {
+            field.selectAll();
+            field.requestFocusInWindow();
+        }
+
+        @Override
+        public void addActionListener(ActionListener listener) {
+            field.addActionListener(listener);
+        }
+
+        @Override
+        public void removeActionListener(ActionListener listener) {
+            field.removeActionListener(listener);
+        }
+    }
+
     private JComponent objectsTab() {
         object.setInputFilter(GitInput.objectFilter());
         object.setValidator(GitInput.objectValidator());
@@ -291,7 +426,7 @@ final class GitView extends JPanel {
 
         JPanel form = new JPanel(new BorderLayout(6, 0));
         form.add(new JLabel("Object"), BorderLayout.WEST);
-        form.add(object, BorderLayout.CENTER);
+        form.add(objectChooser(), BorderLayout.CENTER);
         form.add(inspect, BorderLayout.EAST);
 
         trail.addCrumbListener(crumb -> inspect((String) crumb.value(), false));
@@ -339,7 +474,6 @@ final class GitView extends JPanel {
         value.addActionListener(e -> runPreset());
         stop.addActionListener(e -> cancel());
         inspect.addActionListener(e -> inspect(object.getText().strip(), true));
-        object.addActionListener(e -> inspect(object.getText().strip(), true));
         explain.addActionListener(e -> explainLast());
     }
 
@@ -389,8 +523,11 @@ final class GitView extends JPanel {
                 return;
             }
             Path root = Path.of(top.lines().get(0).strip());
-            execute(List.of(new Step("open", GitCommands.currentBranch(root))), more -> {
+            execute(List.of(new Step("open", GitCommands.currentBranch(root)),
+                    new Step("open", GitCommands.refs(root, 200))), more -> {
                 repository = root;
+                refNames = more.size() > 1 && more.get(1).exitCode() == 0 ? more.get(1).lines() : List.of();
+                refreshChoices();
                 repositoryField.setText(root.toString());
                 String branch = more.get(0).exitCode() == 0 && !more.get(0).lines().isEmpty() ? more.get(0).lines().get(0) : "?";
                 setRepositoryInfo(GOOD, "Open: " + root + "   ·   branch " + branch);
@@ -533,6 +670,7 @@ final class GitView extends JPanel {
             }
             List<GraphCommit> commits = GitLog.parse(outcome.lines());
             graph.setCommits(commits);
+            refreshChoices();
             long merges = commits.stream().filter(GraphCommit::isMerge).count();
             setGraphStatus(GOOD, count(commits.size(), "commit") + "  ·  " + count((int) merges, "merge")
                     + "  ·  " + outcome.durationMs() + " ms"
@@ -590,6 +728,10 @@ final class GitView extends JPanel {
                 return;
             }
             trail.setPath(Crumb.of(spec, spec));
+            context.preferences().put("object", spec);
+            recentObjects.remove(spec);
+            recentObjects.add(0, spec);
+            refreshChoices();
         }
         tabs.setSelectedComponent(objectsTab);
         objectHeader.setText("Inspecting " + spec + "…");
@@ -847,7 +989,7 @@ final class GitView extends JPanel {
         graphLimit.addChangeListener(e -> p.putInt("graph.limit", (Integer) graphLimit.getValue()));
         preset.addActionListener(e -> p.put("preset", ((GitPreset) preset.getSelectedItem()).name()));
         limit.addChangeListener(e -> p.putInt("limit", (Integer) limit.getValue()));
-        object.addActionListener(e -> p.put("object", object.getText().strip()));
+
     }
 
     void focusFirstField() {

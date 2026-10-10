@@ -63,7 +63,10 @@ public final class GitLog {
         return commits;
     }
 
-    /** Parses {@code %D} with full decoration, e.g. {@code HEAD -> refs/heads/main, tag: refs/tags/v1}. */
+    /**
+     * Parses {@code %D} with full decoration, e.g. {@code HEAD -> refs/heads/main, tag: refs/tags/v1},
+     * or full ref names as {@code for-each-ref} lists them.
+     */
     static List<Ref> refs(String decoration) {
         List<Ref> refs = new ArrayList<>();
         if (decoration.isBlank()) {
@@ -77,6 +80,8 @@ public final class GitLog {
                 refs.add(new Ref("HEAD", Kind.HEAD));   // detached
             } else if (p.startsWith("tag: ")) {
                 refs.add(new Ref(shortName(p.substring("tag: ".length())), Kind.TAG));
+            } else if (p.startsWith("refs/tags/")) {   // as for-each-ref writes it
+                refs.add(new Ref(shortName(p), Kind.TAG));
             } else if (p.startsWith("refs/heads/")) {
                 refs.add(new Ref(shortName(p), Kind.BRANCH));
             } else if (p.startsWith("refs/remotes/")) {

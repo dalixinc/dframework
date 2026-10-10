@@ -9,7 +9,9 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseEvent;
 import java.io.Serial;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 import javax.swing.JTextField;
 import javax.swing.ToolTipManager;
@@ -58,6 +60,7 @@ public class DTextField extends JTextField {
 
     private transient Validator validator;
     private transient InputFilter inputFilter;
+    private transient UnaryOperator<String> pasteCleaner = DTextField::firstValue;
     private final transient DocumentFilter documentFilter = new FilteringDocumentFilter();
     private transient FocusHighlighter highlighter;
     private transient DocumentListener documentListener;
@@ -128,6 +131,47 @@ public class DTextField extends JTextField {
      */
     public void setInputFilter(InputFilter inputFilter) {
         this.inputFilter = inputFilter;
+    }
+
+    /** How pasted or dropped text is tidied before the filter sees it, if at all. */
+    public Optional<UnaryOperator<String>> getPasteCleaner() {
+        return Optional.ofNullable(pasteCleaner);
+    }
+
+    /**
+     * Sets how text inserted in one go (a paste, a drop, or {@code setText}) is
+     * tidied before the input filter checks it. The default,
+     * {@link #firstValue(String)}, turns text copied from a terminal or a table
+     * into the one value a single-line field wants. {@code null} inserts text
+     * exactly as it comes.
+     */
+    public void setPasteCleaner(UnaryOperator<String> pasteCleaner) {
+        this.pasteCleaner = pasteCleaner;
+    }
+
+    /**
+     * The default paste cleaner. Text containing line breaks or tabs is
+     * reduced to its first non-blank line, and that to its first non-blank
+     * tab-separated cell, then trimmed. Other text is left alone, so typing a
+     * space, or {@code setText(" x ")}, is unchanged.
+     *
+     * <pre>{@code
+     * "a1fa325\n"            -> "a1fa325"
+     * "\n  main  \n"        -> "main"
+     * "a1fa325\tMerge ..."   -> "a1fa325"
+     * }</pre>
+     */
+    public static String firstValue(String text) {
+        if (text == null || text.indexOf('\n') < 0 && text.indexOf('\r') < 0 && text.indexOf('\t') < 0) {
+            return text;
+        }
+        String line = text.lines().filter(l -> !l.isBlank()).findFirst().orElse("");
+        for (String cell : line.split("\t")) {
+            if (!cell.isBlank()) {
+                return cell.strip();
+            }
+        }
+        return "";
     }
 
     /** Whether the current text passes the validator. Always true without one. */
@@ -244,6 +288,9 @@ public class DTextField extends JTextField {
         public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs)
                 throws BadLocationException {
             String insert = text == null ? "" : text;
+            if (pasteCleaner != null && insert.length() > 1) {
+                insert = Objects.requireNonNullElse(pasteCleaner.apply(insert), "");
+            }
             if (inputFilter != null) {
                 Document doc = fb.getDocument();
                 String current = doc.getText(0, doc.getLength());

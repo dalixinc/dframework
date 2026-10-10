@@ -406,6 +406,21 @@ age.setValidator(Validator.integer(0, 130));                              // wha
 An `InputFilter` blocks any keystroke, paste or drop that would break it,
 with a beep. A paste containing any bad character is rejected entirely.
 
+Before the filter sees it, a paste is tidied:
+- **Lines:** text with line breaks is cut to its first non-blank line.
+  Copying from a terminal often adds a trailing newline.
+- **Table rows:** text with tabs is cut to its first non-blank cell. A
+  copied table row is tab-separated.
+- **Ends:** what's left is trimmed.
+
+Text without line breaks or tabs is left alone. To change this, use
+`setPasteCleaner(...)`; `null` turns it off.
+
+```java
+DTextField id = new DTextField(20);
+id.setPasteCleaner(text -> DTextField.firstValue(text).toLowerCase());   // tidy, then lower-case
+```
+
 | Filter | Allows |
 |---|---|
 | `InputFilter.digits()` | 0-9 only |
@@ -614,6 +629,8 @@ JScrollPane scroller = new JScrollPane(graph);
   else grey.
 - **Tooltips:** hovering over a row shows the full id, author, date and
   refs.
+- **Copying:** <kbd>Ctrl</kbd>+<kbd>C</kbd> copies the selected commit's
+  full id, rather than the tab-separated row an ordinary table copies.
 - **Missing parents:** a parent that isn't in the list, because the history
   was cut off, gets a line running off the bottom.
 - **Lane colours:** `setLaneColours` changes the colours the lanes cycle
@@ -1181,8 +1198,16 @@ working tree is clean."
 trees list *blobs* (file contents) and other trees. The Objects tab lets you
 walk them:
 
-- Type an object and press **Inspect**: `HEAD`, `HEAD~3`, `main^{tree}`,
-  `HEAD:README.md` (a file as of a commit) or an object id.
+- Type or paste an object and press **Inspect** or Enter: `HEAD`, `HEAD~3`,
+  `main^{tree}`, `HEAD:README.md` (a file as of a commit) or an object id.
+- **The dropdown** lists, in this order:
+  - objects you inspected recently;
+  - `HEAD`, `HEAD^{tree}` and `HEAD~1`;
+  - every branch, remote branch and tag, newest first;
+  - the commits in the graph, each with its description.
+
+  Arrow keys move through the list. Enter or a click inspects the chosen
+  entry.
 - You see its type, full id and size, then its content:
   - **Commits** and **tags** show their text, with buttons to follow their
     **tree** and **parent** (or tagged **object**) links.
@@ -1202,6 +1227,8 @@ again for each repository you open.
 - **Refresh:** runs the command again.
 - **Opening a commit:** double-click a commit, or select it and press Enter,
   to open it in the Objects tab.
+- **Copying an id:** <kbd>Ctrl</kbd>+<kbd>C</kbd> copies the selected
+  commit's full id.
 
 It runs one command, shown under the hood and audited as *graph*:
 `git log --all --topo-order --decorate=full -n 500 --format=…`.

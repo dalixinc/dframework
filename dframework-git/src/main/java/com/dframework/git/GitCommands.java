@@ -61,4 +61,13 @@ public final class GitCommands {
         }
         return command(repository, List.of("cat-file", option, "--end-of-options", spec));
     }
+
+    /**
+     * Branches, remote branches and tags, newest first:
+     * {@code for-each-ref --sort=-creatordate --count=<n> --format=%(refname) refs/heads refs/remotes refs/tags}.
+     */
+    public static List<String> refs(Path repository, int count) {
+        return command(repository, List.of("for-each-ref", "--sort=-creatordate", "--count=" + count,
+                "--format=%(refname)", "refs/heads", "refs/remotes", "refs/tags"));
+    }
 }

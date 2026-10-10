@@ -9,11 +9,13 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
-import java.awt.font.FontRenderContext;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.font.FontRenderContext;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.RoundRectangle2D;
@@ -32,6 +34,7 @@ import javax.swing.JComponent;
 import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
+import javax.swing.TransferHandler;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableColumn;
@@ -106,6 +109,22 @@ public class DCommitGraph extends DTable {
                 }
             }
         });
+        // Copy gives the commit's full id, which is what you paste somewhere else, rather
+        // than JTable's tab-separated row.
+        setTransferHandler(new TransferHandler() {
+            @Serial
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public int getSourceActions(JComponent c) {
+                return COPY;
+            }
+
+            @Override
+            protected Transferable createTransferable(JComponent c) {
+                return getSelectedCommit().map(commit -> new StringSelection(commit.id())).orElse(null);
+            }
+        });
         getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openCommit");
         getActionMap().put("openCommit", new AbstractAction() {
             @Serial
@@ -176,7 +195,7 @@ public class DCommitGraph extends DTable {
         if (!c.refs().isEmpty()) {
             html.append("<br>").append(escape(String.join(", ", c.refs().stream().map(GraphCommit.Ref::name).toList())));
         }
-        return html.append("<br><i>Double-click to inspect</i></html>").toString();
+        return html.append("<br><i>Double-click to inspect; Ctrl+C copies the id</i></html>").toString();
     }
 
     private void fireOpen(int row) {

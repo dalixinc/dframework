@@ -474,6 +474,21 @@ initially shipped only validators, and the owner reported fields
 "permitting more than they should". That's how the distinction became
 explicit.
 
+**Paste cleaning.** A paste is all or nothing, so one stray character
+rejects the whole of it. The owner found a commit id that wouldn't paste
+into the Git Browser: the copy carried a trailing newline, and the object
+filter refuses control characters. JTextField's own newline handling
+doesn't help. `PlainDocument` turns newlines into spaces only in
+`insertString`, and a paste arrives through `replace`. So before the filter
+sees it, any insertion longer than one character goes through the paste
+cleaner. The default, `firstValue`, takes the first non-blank line, then the
+first non-blank tab-separated cell, then trims the result.
+- **When it acts:** only on text containing a line break or tab. Typed
+  characters and ordinary `setText` calls are untouched, so a typed space,
+  or a value with spaces at its ends, stays as entered.
+- **Where:** it's on the library field rather than the Git Browser, so DNS
+  Dig and every other filtered field get it too.
+
 **Filter mechanics.**
 - **Hook:** a `DocumentFilter` on the field's `AbstractDocument`.
   `insertString` and `remove` both route through `replace`, which builds
@@ -1181,6 +1196,29 @@ showing `git log --graph`'s ASCII art.
   parents, author) rather than the separator-delimited text.
 - **Opening a commit** double-clicks through to the Objects tab, so the
   graph and git's object storage are one click apart.
+
+**The Object dropdown.** It is an editable `JComboBox` whose editor is the
+`DTextField`, through a small `ComboBoxEditor` adapter, so the field's
+filter, validator and paste cleaning still apply. The field's error
+outline is copied to the combo box, which draws the border. The entries
+(`ObjectChoice.build`) are recently inspected objects, the HEAD shortcuts,
+refs from `git for-each-ref`, and the graph's commits, without repeats.
+`for-each-ref` runs once when a repository opens; it is shown and audited
+as *open*.
+- **Arrow keys:** they would normally select, and so inspect, every entry
+  they pass. `JComboBox.isTableCellEditor` makes them only move the
+  highlight.
+- **One inspection per action:** Enter in the editor and choosing an entry
+  can both fire for one action, and the editor only shows the chosen entry
+  afterwards. So both go through `requestInspect`, which runs one
+  inspection later on the event thread and reads the editor then.
+- **Focus loss:** an editable combo box "commits" its text when it loses
+  focus. Only the editor's Enter and choosing an `ObjectChoice` inspect, so
+  clicking away doesn't start an inspection.
+- **Checked:** the end-to-end check confirmed four commands per inspection,
+  for both a paste with Enter and a choice from the list.
+- **Copying from the graph:** `DCommitGraph`'s `TransferHandler` copies the
+  selected commit's full id.
 
 ### 6.23 `DCommitGraph` and `CommitGraph`
 
