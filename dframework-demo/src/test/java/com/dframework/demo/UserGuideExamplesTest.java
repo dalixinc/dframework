@@ -38,6 +38,7 @@ class UserGuideExamplesTest {
             import com.dframework.swing.button.*;
             import com.dframework.swing.close.*;
             import com.dframework.swing.command.*;
+            import com.dframework.swing.exec.*;
             import com.dframework.swing.dialog.*;
             import com.dframework.swing.field.*;
             import com.dframework.swing.nav.*;

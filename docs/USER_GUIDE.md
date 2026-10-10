@@ -47,9 +47,11 @@ containing a sortable, searchable table with a live row count.
 17. [The audit log: `AuditLog`](#17-the-audit-log-auditlog)
 18. [Plugins: `DPlugin` and `DPluginHost`](#18-plugins-dplugin-and-dpluginhost)
 19. [The DNS Dig plugin](#19-the-dns-dig-plugin)
-20. [Resources: `DResources`](#20-resources-dresources)
-21. [Putting it together](#21-putting-it-together)
-22. [Tips, rules and FAQ](#22-tips-rules-and-faq)
+20. [The Git Browser plugin](#20-the-git-browser-plugin)
+21. [Building tool plugins: `CommandRunner`, `DCommandPane`, `DExplainPane`](#21-building-tool-plugins-commandrunner-dcommandpane-dexplainpane)
+22. [Resources: `DResources`](#22-resources-dresources)
+23. [Putting it together](#23-putting-it-together)
+24. [Tips, rules and FAQ](#24-tips-rules-and-faq)
 
 ---
 
@@ -148,6 +150,7 @@ Run it and try closing the window. You'll be asked first.
 | | Log Call, Open Call, Time Sheet | Placeholders honouring the 2005 VB6 original |
 | **Admin** | Users, Settings, Backup, About | Placeholders, and an About box with a spinning sign |
 | **Plugins** | DNS Dig | A plugin found at runtime: run `dig` lookups, see the parsed answers, and see exactly which command runs |
+| | Git Browser | Explore a git repository read-only: common commands from a dropdown, and git's raw objects (commits, trees, blobs) |
 
 Things to try:
 
@@ -1085,7 +1088,127 @@ classpath and host plugins as shown in [chapter 18](#18-plugins-dplugin-and-dplu
 
 ---
 
-## 20. Resources: `DResources`
+## 20. The Git Browser plugin
+
+The Git Browser (the `dframework-git` module) explores a git repository
+**read-only** and shows every git command it runs. It follows the same rules
+as DNS Dig: no shell, validated input, an "Under the hood" pane, an audit
+record for every command, and an optional AI explanation.
+
+**Opening a repository.** Type or **Browse…** to any folder inside a
+repository and press **Open**. The browser finds the repository's top folder
+and shows the current branch. It remembers the last repository; the first
+time, it opens the folder the application was started from, if that's a
+repository.
+
+**Commands tab.** Choose from a dropdown of common read-only commands. Each
+has a one-line description:
+
+| Command | Runs |
+|---|---|
+| Status | `git status --short --branch` |
+| Recent commits / All branches | `git log --oneline --graph --decorate [--all] -n <limit>` |
+| Show a commit | `git show --stat --format=fuller <revision>` (default HEAD) |
+| Unstaged / Staged changes | `git diff --stat`, `git diff --cached --stat` |
+| Branches, Tags, Remotes | `git branch --all -vv`, `git tag --list -n1`, `git remote -v` |
+| Contributors | `git shortlog -sne HEAD` |
+| Reflog, Stashes | `git reflog -n <limit>`, `git stash list` |
+| Tracked files | `git ls-files` |
+| History of a file, Blame a file | `git log --follow -- <path>`, `git blame -- <path>` |
+| Describe, Object counts | `git describe --tags --always --dirty`, `git count-objects -v -H` |
+| Repository settings | `git config --local --list` |
+
+Where a command needs one, a **Revision** (such as `HEAD~3`, `main` or
+`v1.0`) or **Path** box is enabled, and **Limit** sets how many entries
+commands like `log` show. Output appears as it arrives. Very large output
+stops at 20,000 lines, and the status line says so.
+
+**Objects tab: git's own storage.** Git stores everything as objects:
+*commits* point to a *tree* (a folder listing) and to their *parents*;
+trees list *blobs* (file contents) and other trees. The Objects tab lets you
+walk them:
+
+- Type an object and press **Inspect**: `HEAD`, `HEAD~3`, `main^{tree}`,
+  `HEAD:README.md` (a file as of a commit) or an object id.
+- You see its type, full id and size, then its content:
+  - **Commits** and **tags** show their text, with buttons to follow their
+    **tree** and **parent** (or tagged **object**) links.
+  - **Trees** show a table of entries. Double-click one to go inside.
+  - **Blobs** show the file's text. Binary files, and files over about
+    2 MB, are summarised rather than shown.
+- A breadcrumb trail (`HEAD › tree 569ee81 › README.md`) lets you step back.
+
+Each inspection runs four commands, all shown and audited:
+`rev-parse --verify` (the full id), `cat-file -t` (type), `cat-file -s`
+(size) and `cat-file -p` (content).
+
+**Read-only, deliberately.** The browser can't change a repository:
+- **Fixed menu:** there's only a menu of read-only commands, with no way to
+  type an arbitrary one.
+- **No hidden writes:** git runs with `GIT_OPTIONAL_LOCKS=0`, so even
+  `git status` doesn't quietly rewrite the index, and with
+  `GIT_TERMINAL_PROMPT=0`, so it never stops to ask for a password.
+- **No option injection:** a revision or path can't start with `-`, so it
+  can't be read as an option (`--output=<file>` would make some commands
+  write a file). Revisions also go after `--end-of-options` and paths after
+  `--`, so git rejects such text even if it got through.
+
+**Under the hood** shows the next command exactly as it runs, environment
+variables included, ready to **Copy** into a terminal. It also lists every
+command run this session, marked *open*, *run* or *inspect*; hover over one
+to see it in full.
+
+**Explain with AI** (when an AI assistant is installed) explains the last
+output: a log, a status, a blame, a commit or a tree. As with DNS Dig, the
+tab says what is sent, shows the exact prompt, and audits the request.
+Commit messages and file contents are passed to the model as data, never as
+instructions.
+
+---
+
+## 21. Building tool plugins: `CommandRunner`, `DCommandPane`, `DExplainPane`
+
+DNS Dig and the Git Browser are built from three library components, ready
+for your own command-line tools.
+
+```java
+List<String> command = List.of("ping", "-c", "3", "example.com");
+Map<String, String> environment = Map.of("LC_ALL", "C");
+
+// Under the hood: the exact command, Copy, this session's history, the audit log location.
+DCommandPane commands = new DCommandPane(context.auditLog(), context.plugin().id(), "run");
+commands.setCommand(CommandLines.display(environment, command));
+
+// Run it without a shell, streaming lines; cancel with runner.cancel().
+CommandRunner runner = new CommandRunner();
+CommandRunner.Outcome outcome = runner.run(command, environment, line -> System.out.println(line));
+context.audit("run", Map.of("command", CommandLines.display(environment, command),
+        "outcome", outcome.exitCode() == 0 ? "ok" : "failed",
+        "exitCode", outcome.exitCode(), "durationMs", outcome.durationMs()));
+```
+
+- **`CommandRunner`** runs a program **without a shell**, so `;`, `$(...)`
+  and `*` in arguments are passed on literally. It merges standard error
+  into the output, can be cancelled, and stops a program after 20,000 lines
+  by default (`outcome.truncated()` reports it). `CommandRunner.locate("git")`
+  checks the program is installed.
+- **`CommandLines.display`** writes a command out as you'd type it, quoting
+  what a shell would interpret, so it can be pasted and run.
+- **`DCommandPane`** is the "Under the hood" content. Put it in a
+  `DCollapsiblePane`. Its history lists the audit entries for your plugin
+  and the actions you name.
+- **`DExplainPane`** is the AI explanation panel: `new DExplainPane(ai,
+  auditLog, source, preferences)`, then `explain(command, prompt)`. It
+  shows the setup hint when there are no credentials, says where the data
+  goes, shows exactly what was sent, and audits the request.
+
+> Programs can still treat an argument starting with `-` as an option.
+> Validate what users type, and use the program's end-of-options marker
+> (often `--`) where it has one.
+
+---
+
+## 22. Resources: `DResources`
 
 Icons and text load from the **classpath**, so they work the same from an
 IDE, a jar or an installer:
@@ -1102,7 +1225,7 @@ DFramework's own text, such as dialog titles and validation messages, is in
 
 ---
 
-## 21. Putting it together
+## 23. Putting it together
 
 A small but complete application using most of the framework:
 
@@ -1162,7 +1285,7 @@ public final class Tracker {
 
 ---
 
-## 22. Tips, rules and FAQ
+## 24. Tips, rules and FAQ
 
 **Do I have to use the Swing event thread?**
 Yes, as with all Swing: create and change components on the event dispatch

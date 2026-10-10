@@ -31,6 +31,7 @@ build (`UserGuideExamplesTest`), so they can't drift from the API.
 | `dframework-swing` | The library (`com.dframework.swing`) |
 | `dframework-demo` | Showcase app: Outlook-bar navigation, live theme switcher, validated fields |
 | `dframework-dig` | **DNS Dig**, a plugin: run `dig` lookups and see exactly what runs |
+| `dframework-git` | **Git Browser**, a plugin: explore a repository read-only, including git's raw objects, and see exactly what runs |
 | `dframework-ai` | Claude-backed `AiAssistant` (Anthropic Java SDK), found at runtime; powers DNS Dig's **Explain with AI** |
 
 A JavaFX module is planned.
@@ -152,7 +153,7 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   finds on the classpath and displays, in the spirit of ActiveX controls.
   Each starts only when first opened, a plugin that fails is contained in
   its own pane, and each gets its own saved settings and audit records.
-  **DNS Dig** is the first. Plugins can also use an AI assistant
+  **DNS Dig** and the **Git Browser** are the first two. Plugins can also use an AI assistant
   (`AiAssistant`); with `dframework-ai` and an `ANTHROPIC_API_KEY`, DNS Dig
   can have Claude explain a result in plain English.
 - **`AuditLog`**: an append-only JSON Lines record of what the application

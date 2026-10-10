@@ -5,6 +5,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.awt.event.MouseEvent;
 import java.io.Serial;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -23,7 +24,9 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.ToolTipManager;
 import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 
@@ -80,8 +83,33 @@ public class DCommandPane extends JPanel {
         commandRow.add(command, BorderLayout.CENTER);
         commandRow.add(copy, BorderLayout.EAST);
 
-        DTable table = new DTable(history);
+        DTable table = new DTable(history) {
+            @Serial
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public String getToolTipText(MouseEvent event) {
+                // Commands are long; show the whole one on hover.
+                int row = rowAtPoint(event.getPoint());
+                int column = columnAtPoint(event.getPoint());
+                Object value = row >= 0 && column >= 0 ? getValueAt(row, column) : null;
+                return value == null || value.toString().isEmpty() ? null : value.toString();
+            }
+        };
         table.setEmptyText("Commands you run appear here.");
+        // The command is what matters: give it the room, and the short columns just enough.
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+        for (int c = 0; c < history.getColumnCount() - 1; c++) {
+            int width = switch (history.getColumnName(c)) {
+                case "Time" -> 70;
+                case "What" -> 64;
+                case "Result" -> 80;
+                default -> 52;
+            };
+            table.getColumnModel().getColumn(c).setPreferredWidth(width);
+            table.getColumnModel().getColumn(c).setMaxWidth(width * 2);
+        }
+        ToolTipManager.sharedInstance().registerComponent(table);
         JScrollPane scroll = new JScrollPane(table);
         scroll.setPreferredSize(new Dimension(400, 110));
         String where = log.file().map(Object::toString).orElse("memory only, not saved to a file");

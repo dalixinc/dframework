@@ -133,6 +133,8 @@ graph LR
     swing --> flatlaf["FlatLaf 3.7.2"]
     demo -. runtime .-> kunst["libs/kunststoff.jar"]
     demo -. "runtime (ServiceLoader)" .-> dig
+    git["dframework-git<br/><i>Git Browser plugin</i>"] --> swing
+    demo -. "runtime (ServiceLoader)" .-> git
     ai["dframework-ai<br/><i>Claude assistant</i>"] --> swing
     ai --> sdk["Anthropic Java SDK 2.65.0"]
     demo -. "runtime (ServiceLoader)" .-> ai
@@ -145,6 +147,7 @@ graph LR
 | `dframework-swing` | The library, published as `com.dframework:dframework-swing` |
 | `dframework-demo` | The showcase (`./gradlew :dframework-demo:run`). It's also the integration test bed: every component is used here as an application would use it |
 | `dframework-ai` | `ClaudeAssistant`, an `AiAssistant` backed by the Anthropic Java SDK. Optional, so the library itself carries no SDK dependencies; found through `ServiceLoader` |
+| `dframework-git` | The Git Browser plugin. Like DNS Dig, the demo has it only on its runtime classpath |
 | `dframework-dig` | The DNS Dig plugin. It depends on the library; the demo has it only on its *runtime* classpath and finds it through `ServiceLoader`, which proves the plugin mechanism end to end |
 | `buildSrc` | One convention plugin shared by every module |
 
@@ -166,7 +169,8 @@ graph LR
 | `panel` | `DCollapsiblePane` |
 | `audit` | `AuditLog` |
 | `plugin` | `DPlugin`, `PluginContext`, `DPluginPane`, `DPluginHost` |
-| `ai` | `AiAssistant`, `AiPrompt`, `AiAnswer`, `AiException` |
+| `ai` | `AiAssistant`, `AiPrompt`, `AiAnswer`, `AiException`, `DExplainPane` |
+| `exec` | `CommandRunner`, `CommandLines`, `DCommandPane` |
 | `util` | `DResources` |
 
 Resources live under `com/dframework/swing/`:
@@ -1089,11 +1093,73 @@ The same fake, given to the demo through `ANTHROPIC_BASE_URL`, was used for
 the end-to-end check of the button, tab, footer and audit. No live API call
 was made during development, because this machine has no API key.
 
+### 6.21 Shared tool-plugin components (`exec`, `DExplainPane`)
+
+When the second command-line plugin arrived, DNS Dig's generic parts moved
+into the library, rather than being copied into a second plugin.
+
+| Component | Was in DNS Dig | Changes on the way |
+|---|---|---|
+| `CommandRunner` | `DigRunner` | Extra environment variables; a line cap (default 20,000) that stops the program and sets `truncated`, so `git ls-files` on a huge repository can't fill memory |
+| `CommandLines` | `DigCommand.display` | Optional `NAME=value` prefix for the environment. `~` and `^` stay readable inside a word (`HEAD~1`) but are quoted at the start, where a shell would expand them |
+| `DCommandPane` | `DigView`'s "Under the hood" | Filters history by several actions, adding a "What" column; gives the Command column the width and shows the full command on hover |
+| `DExplainPane` | `DigExplainPanel` | Takes an `AiPrompt` from the caller; audits under a given source |
+
+DNS Dig's behaviour didn't change, and its tests moved with the code.
+
+### 6.22 The Git Browser (`dframework-git`)
+
+**Read-only is a design rule, not a hope.**
+- **No free-form commands.** `GitPreset` is a fixed list of read-only
+  commands, in their listing forms only (`branch --all`, `tag --list`,
+  `stash list`, `config --local --list`). A test checks every preset's
+  subcommand against an allowlist.
+- **`GIT_OPTIONAL_LOCKS=0`.** Even `git status` refreshes and rewrites the
+  index when file timestamps change. A manual check confirmed it: the
+  index's checksum changed after a plain `git status` and not after ours.
+  `GitIntegrationTest` pins it by touching a file in a real temporary
+  repository and comparing the index bytes before and after.
+- **`GIT_TERMINAL_PROMPT=0`**, so git never blocks waiting for credentials,
+  and `--no-pager`, so output is never piped to a pager. With stdin closed,
+  a pager would wait for input that never comes.
+- **`-C <repository>`** on every command, so nothing depends on the current
+  folder.
+
+**Option injection.** Even without a shell, a value starting with `-` would
+reach git as an option, and some read-only commands accept options that
+write (`--output=<file>`). Two layers:
+1. Input filters and validators refuse a leading `-` for revisions, objects
+   and paths.
+2. Revisions follow `--end-of-options` and paths follow `--`. A manual test
+   on git 2.43 confirmed git then *rejects*
+   `show --end-of-options --output=/tmp/x` and writes nothing, and
+   `GitIntegrationTest` pins that too.
+
+**Object inspection.** Each Inspect runs four separate commands:
+`rev-parse --verify --end-of-options <spec>^{object}`, then `cat-file -t`,
+`cat-file -s` and `cat-file -p` on the full id. One `cat-file --batch`
+process would be faster, but separate commands show and audit exactly
+what each step does, which is the point of the tool. They run in sequence
+on one `SwingWorker`, and each is audited as it completes.
+- **Parsing:** `GitObjects` reads the `-p` output. Tree lines are
+  `mode type id<TAB>name`, so names with spaces work. Commit and tag links
+  come from the header only (`tree`, `parent`, `object`), which ends at
+  the first blank line, so a commit message containing "tree …" can't
+  create a link.
+- **Large and binary blobs:** blobs over 2 MB aren't fetched at all, and
+  binary content (a NUL or a decoding replacement character) is summarised
+  rather than shown.
+
+**The AI prompt** (`GitExplainPrompt`) wraps output in `<git_output>` tags
+and declares it data: commit messages, file contents and branch names are
+written by other people. Output over 100,000 characters is refused with a
+suggestion to lower the limit.
+
 ---
 
 ## 7. Testing strategy
 
-**211 tests**, all run by `./gradlew build`.
+**238 tests**, all run by `./gradlew build`.
 
 ### Headless first
 
@@ -1139,6 +1205,7 @@ static void requireDisplay() {
 | reading the palette UI | package-private `search()`, `setQuery()` and `runSelected()` |
 | finding plugins | a test `META-INF/services` file registering a working plugin and one that throws on start-up |
 | running dig | `echo` and `sleep` in place of dig (`DigRunnerTest`), and real dig output saved as fixtures (`DigOutputTest`) |
+| exercising git | a real temporary repository built by the test (`GitIntegrationTest`): every preset, the commit-to-tree-to-blob walk, the index-unchanged check, and the refused `--output` injection |
 | calling Claude | a local fake Messages API serving server-sent events (`ClaudeAssistantTest`), and stand-in assistants (`DigExplainPanelTest`) |
 
 ### Regression tests pin every bug found
@@ -1212,6 +1279,8 @@ several problems the unit tests couldn't:
 - **Plugins are trusted code.** They share the host's class loader and
   permissions, with no sandbox. They also can't be unloaded, and two
   plugins needing different versions of the same library would conflict.
+- **The Git Browser reads; it never writes,** so it can't fetch, check
+  out or commit. That's deliberate.
 - **DNS Dig depends on dig's text output**, which isn't a formal
   interface. The parser is lenient and tested against dig 9.18; other
   major versions may need new fixtures.
