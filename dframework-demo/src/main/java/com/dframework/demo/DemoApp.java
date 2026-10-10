@@ -12,12 +12,14 @@ import javax.swing.Box;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JRadioButton;
@@ -35,6 +37,7 @@ import javax.swing.SwingUtilities;
 
 import com.dframework.swing.CloseAction;
 import com.dframework.swing.DFrame;
+import com.dframework.swing.dialog.MessageIcons;
 import com.dframework.swing.theme.DTheme;
 import com.dframework.swing.theme.ThemeManager;
 import com.dframework.swing.util.DResources;
@@ -48,8 +51,22 @@ public final class DemoApp {
     private DemoApp() {
     }
 
+    private static final String ICONS = "com/dframework/demo/icons/";
+
+    /** The classic DFramework window icons, offered in the Window Icon menu. */
+    private static final String[][] WINDOW_ICONS = {
+            {"Alien", "alien10.gif"}, {"Blue Alien", "alien15.gif"}, {"Flying Saucer", "alien21.gif"},
+            {"Starburst", "alien3.gif"}, {"Pirate Skull", "skull3.gif"}, {"Skull and Crossbones", "skull8.gif"},
+            {"Old Bones", "skull7.gif"}, {"Skull", "skull10.gif"}, {"Burger", "food9.gif"},
+            {"Cocktail", "food24.gif"}, {"Coffee", "food25.gif"}, {"CD-ROM", "cdrom1.gif"},
+            {"Floppy Disk", "COflp16.gif"}, {"Book", "BOOK02.GIF"}, {"Film Reel", "FILM01.GIF"},
+            {"Palette", "palette.GIF"}, {"Shades", "shades.GIF"}, {"Company", "company.gif"},
+    };
+
     public static void main(String[] args) {
         ThemeManager.applyOrFallback(DTheme.FLAT_LIGHT, DTheme.SYSTEM);
+        // Spinning road signs on every dialog: a bit much, but this is a demo.
+        MessageIcons.use(MessageIcons.Style.ANIMATED);
         SwingUtilities.invokeLater(DemoApp::createAndShow);
     }
 
@@ -65,8 +82,9 @@ public final class DemoApp {
 
         DFrame frame = DFrame.builder()
                 .title("DFramework Demo")
-                .icon(DResources.icon(DemoApp.class, "icons/alien10.gif").orElseThrow().getImage())
+                .icon(ICONS + "alien10.gif")
                 .closeAction(CloseAction.CONFIRM_EXIT)
+                .lafDecorated(true)
                 .content(root)
                 .size(820, 560)
                 .build();
@@ -98,7 +116,61 @@ public final class DemoApp {
         JMenuBar bar = new JMenuBar();
         bar.add(file);
         bar.add(theme);
+        bar.add(dialogsMenu(frame));
+        bar.add(windowIconMenu(frame));
         return bar;
+    }
+
+    private static JMenu dialogsMenu(DFrame frame) {
+        JMenu menu = new JMenu("Dialogs");
+        menu.setMnemonic(KeyEvent.VK_D);
+
+        JCheckBoxMenuItem animated = new JCheckBoxMenuItem("Animated Icons",
+                MessageIcons.current() == MessageIcons.Style.ANIMATED);
+        animated.addActionListener(e -> MessageIcons.use(
+                animated.isSelected() ? MessageIcons.Style.ANIMATED : MessageIcons.Style.LOOK_AND_FEEL));
+        menu.add(animated);
+        menu.addSeparator();
+
+        // Plain JOptionPane calls: MessageIcons styles them without any wrapper.
+        menu.add(item("Information...", () -> JOptionPane.showMessageDialog(frame,
+                "DFramework was first written in 2001.", "Information", JOptionPane.INFORMATION_MESSAGE)));
+        menu.add(item("Warning...", () -> JOptionPane.showMessageDialog(frame,
+                "These icons may be a bit much.", "Warning", JOptionPane.WARNING_MESSAGE)));
+        menu.add(item("Error...", () -> JOptionPane.showMessageDialog(frame,
+                "Something has gone horribly wrong.", "Error", JOptionPane.ERROR_MESSAGE)));
+        menu.add(item("Question...", () -> JOptionPane.showConfirmDialog(frame,
+                "Do you like the spinning signs?", "Question", JOptionPane.YES_NO_OPTION)));
+        return menu;
+    }
+
+    private static JMenu windowIconMenu(DFrame frame) {
+        JMenu menu = new JMenu("Window Icon");
+        menu.setMnemonic(KeyEvent.VK_W);
+        ButtonGroup group = new ButtonGroup();
+
+        JRadioButtonMenuItem dflt = new JRadioButtonMenuItem("DFramework Default");
+        dflt.addActionListener(e -> frame.useDefaultIcon());
+        group.add(dflt);
+        menu.add(dflt);
+        menu.addSeparator();
+
+        for (String[] entry : WINDOW_ICONS) {
+            String location = ICONS + entry[1];
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(entry[0],
+                    DResources.load(location).orElseThrow());
+            item.setSelected(entry[1].equals("alien10.gif"));
+            item.addActionListener(e -> frame.setIcon(location));
+            group.add(item);
+            menu.add(item);
+        }
+        return menu;
+    }
+
+    private static JMenuItem item(String text, Runnable action) {
+        JMenuItem item = new JMenuItem(text);
+        item.addActionListener(e -> action.run());
+        return item;
     }
 
     private static JComponent showcase() {

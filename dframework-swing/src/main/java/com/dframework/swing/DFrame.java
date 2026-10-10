@@ -6,14 +6,18 @@ import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
 import java.io.Serial;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JMenuBar;
 import javax.swing.JRootPane;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
 import com.dframework.swing.close.ConfirmCloser;
@@ -45,19 +49,74 @@ public class DFrame extends JFrame {
 
     private static final System.Logger LOG = System.getLogger(DFrame.class.getName());
 
+    private static volatile List<? extends Image> defaultIcons = List.of(DResources.appIcon().getImage());
+
     private CloseAction closeAction;
     private transient ConfirmCloser closer;
+    private boolean lafDecorated;
 
-    /** An untitled frame with the default icon that exits the application on close. */
+    /** An untitled frame with the {@linkplain #setDefaultIcon default icon} that exits the application on close. */
     public DFrame() {
         this("");
     }
 
-    /** A titled frame with the default icon that exits the application on close. */
+    /** A titled frame with the {@linkplain #setDefaultIcon default icon} that exits the application on close. */
     public DFrame(String title) {
         super(title);
-        setIconImage(DResources.appIcon().getImage());
+        useDefaultIcon();
         setCloseAction(CloseAction.EXIT);
+    }
+
+    /**
+     * Sets the icon every new DFrame starts with, application-wide. Existing
+     * frames keep theirs until {@link #useDefaultIcon()} is called.
+     * Initially the DFramework icon.
+     */
+    public static void setDefaultIcon(Image icon) {
+        setDefaultIcons(List.of(icon));
+    }
+
+    /**
+     * Sets the default icon from a classpath resource or file path.
+     *
+     * @throws IllegalArgumentException if there is no image at {@code location}
+     * @see #setDefaultIcon(Image)
+     */
+    public static void setDefaultIcon(String location) {
+        setDefaultIcon(loadImage(location));
+    }
+
+    /** Sets default icons in several sizes; the platform picks the best fit. */
+    public static void setDefaultIcons(List<? extends Image> icons) {
+        if (icons.isEmpty()) {
+            throw new IllegalArgumentException("At least one icon is required");
+        }
+        defaultIcons = List.copyOf(icons);
+    }
+
+    /** The icons new DFrames start with. */
+    public static List<? extends Image> getDefaultIcons() {
+        return defaultIcons;
+    }
+
+    /** Puts the application-wide {@linkplain #setDefaultIcon default icon} back on this frame. */
+    public void useDefaultIcon() {
+        setIconImages(defaultIcons);
+    }
+
+    /**
+     * Sets the window icon from a classpath resource or file path, e.g.
+     * {@code "com/myapp/logo.png"} or {@code "./icons/alien10.gif"}.
+     *
+     * @throws IllegalArgumentException if there is no image at {@code location}
+     */
+    public void setIcon(String location) {
+        setIconImage(loadImage(location));
+    }
+
+    /** Sets the window icon from any Swing {@link Icon}. */
+    public void setIcon(Icon icon) {
+        setIconImage(toImage(icon));
     }
 
     /** Starts building a frame. */
@@ -101,6 +160,24 @@ public class DFrame extends JFrame {
     }
 
     /**
+     * Draws the title bar and border with the look and feel (for example
+     * FlatLaf's themed title bar, which also shows the window icon) instead of
+     * the OS window manager.
+     *
+     * <p>If the theme is later switched to one that cannot decorate windows,
+     * such as GTK+, the frame falls back to the OS title bar, and goes back to
+     * the themed one when a capable theme returns.
+     */
+    public void setLafDecorated(boolean lafDecorated) {
+        this.lafDecorated = lafDecorated;
+        syncDecorations();
+    }
+
+    public boolean isLafDecorated() {
+        return lafDecorated;
+    }
+
+    /**
      * Puts the window into {@code state}. If the platform cannot maximise,
      * {@link WindowState#MAXIMIZED} falls back to filling the usable screen area.
      */
@@ -132,6 +209,64 @@ public class DFrame extends JFrame {
         setWindowState(WindowState.NORMAL);
     }
 
+    @Override
+    protected JRootPane createRootPane() {
+        JRootPane pane = new JRootPane() {
+            @Serial
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                // Runs on every theme change; deferred because the first call
+                // happens while JFrame's constructor is still running.
+                SwingUtilities.invokeLater(DFrame.this::syncDecorations);
+            }
+        };
+        pane.setOpaque(true);
+        return pane;
+    }
+
+    /** Matches the decorations to {@link #lafDecorated} and what the current look and feel supports. */
+    private void syncDecorations() {
+        boolean decorate = lafDecorated && UIManager.getLookAndFeel().getSupportsWindowDecorations();
+        if (decorate == (getRootPane().getWindowDecorationStyle() != JRootPane.NONE)) {
+            return;
+        }
+        // Decorations can only change while the frame is not displayable.
+        boolean visible = isVisible();
+        int state = getExtendedState();
+        if (isDisplayable()) {
+            dispose();
+        }
+        setUndecorated(decorate);
+        getRootPane().setWindowDecorationStyle(decorate ? JRootPane.FRAME : JRootPane.NONE);
+        if (visible) {
+            setVisible(true);
+            setExtendedState(state);
+        }
+    }
+
+    private static Image loadImage(String location) {
+        return DResources.load(location)
+                .orElseThrow(() -> new IllegalArgumentException("No image found at " + location))
+                .getImage();
+    }
+
+    private static Image toImage(Icon icon) {
+        if (icon instanceof ImageIcon imageIcon) {
+            return imageIcon.getImage();
+        }
+        BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_INT_ARGB);
+        var g = image.createGraphics();
+        try {
+            icon.paintIcon(null, g, 0, 0);
+        } finally {
+            g.dispose();
+        }
+        return image;
+    }
+
     private void installCloser(ConfirmCloser newCloser) {
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         closer = newCloser;
@@ -159,9 +294,23 @@ public class DFrame extends JFrame {
             return this;
         }
 
-        /** Window icon; defaults to the DFramework application icon. */
+        /** Window icon; defaults to {@link DFrame#getDefaultIcons()}. */
         public Builder icon(Image icon) {
             return icons(List.of(icon));
+        }
+
+        /** Window icon from any Swing {@link Icon}. */
+        public Builder icon(Icon icon) {
+            return icon(toImage(icon));
+        }
+
+        /**
+         * Window icon from a classpath resource or file path.
+         *
+         * @throws IllegalArgumentException if there is no image at {@code location}
+         */
+        public Builder icon(String location) {
+            return icon(loadImage(location));
         }
 
         /** Window icons in several sizes; the platform picks the best fit. */
@@ -203,11 +352,7 @@ public class DFrame extends JFrame {
             return this;
         }
 
-        /**
-         * Draws the title bar and border with the look and feel (for example
-         * FlatLaf's themed title bar) instead of the OS window manager. Ignored
-         * if the current look and feel cannot decorate windows.
-         */
+        /** See {@link DFrame#setLafDecorated(boolean)}. */
         public Builder lafDecorated(boolean lafDecorated) {
             this.lafDecorated = lafDecorated;
             return this;
@@ -216,10 +361,7 @@ public class DFrame extends JFrame {
         /** Creates the frame without showing it. */
         public DFrame build() {
             DFrame frame = new DFrame(title);
-            if (lafDecorated && UIManager.getLookAndFeel().getSupportsWindowDecorations()) {
-                frame.setUndecorated(true);
-                frame.getRootPane().setWindowDecorationStyle(JRootPane.FRAME);
-            }
+            frame.setLafDecorated(lafDecorated);
             if (icons != null) {
                 frame.setIconImages(icons);
             }

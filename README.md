@@ -28,10 +28,21 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
 
 ### What's in the box
 
-- **`DFrame`**: a `JFrame` with a default icon, a fluent builder, centring,
-  simple window-state control (`maximize()`, `minimize()`, `restore()`) and a
+- **`DFrame`**: a `JFrame` with a fluent builder, centring, simple
+  window-state control (`maximize()`, `minimize()`, `restore()`) and a
   configurable `CloseAction`: `EXIT`, `CONFIRM_EXIT`, `DISPOSE`,
   `CONFIRM_DISPOSE`, `HIDE` or `NOTHING`.
+  - **Window icons:** an application-wide default
+    (`DFrame.setDefaultIcon("com/myapp/logo.png")`), per-frame
+    `setIcon(...)` from a classpath resource, file path, `Image` or `Icon`,
+    and `useDefaultIcon()` to go back.
+  - **Themed title bars:** `lafDecorated(true)` lets FlatLaf, Metal or
+    Kunststoff draw the title bar (which shows the icon, unlike GNOME's). It
+    falls back to the OS title bar if you switch to a theme that can't.
+- **`MessageIcons`**: one call, `MessageIcons.use(MessageIcons.Style.ANIMATED)`,
+  puts DFramework's classic spinning road-sign icons on *every*
+  `JOptionPane` in the app, including plain `JOptionPane.showMessageDialog`
+  calls. They survive theme switches; `Style.LOOK_AND_FEEL` turns them off.
 - **`ConfirmCloser`**: an "are you sure?" prompt that works as both a
   `WindowListener` and an `ActionListener`, so the close button and a
   *File → Exit* menu item ask the same question.
