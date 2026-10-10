@@ -1,0 +1,15 @@
+.gradle/
+build/
+.kotlin/
+out/
+bin/
+*.class
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
