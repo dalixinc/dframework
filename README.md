@@ -36,6 +36,10 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
     (`DFrame.setDefaultIcon("com/myapp/logo.png")`), per-frame
     `setIcon(...)` from a classpath resource, file path, `Image` or `Icon`,
     and `useDefaultIcon()` to go back.
+  - **Remembers where you left it:** `.rememberBounds("myapp.main")` saves
+    position, size and maximised state between runs. If the saved spot is no
+    longer on a connected monitor, the window opens in its default position
+    instead. `WindowMemory` does the same for any window or dialog.
   - **Themed title bars:** `lafDecorated(true)` lets FlatLaf, Metal or
     Kunststoff draw the title bar (which shows the icon, unlike GNOME's). It
     falls back to the OS title bar if you switch to a theme that can't.
@@ -80,6 +84,16 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   DToast.success(frame, "Saved");
   DToast.builder(frame).type(DToast.Type.WARNING).title("Deleted 3 calls")
           .message("They are in the bin for 30 days.").action("Undo", this::undo).show();
+  ```
+- **`DCommandPalette`**: <kbd>Ctrl+Shift+P</kbd> opens a searchable list
+  of everything the app can do, as in modern editors. Fuzzy matching means
+  `fdark` finds *Theme › FlatLaf Dark*. Recently used commands come first.
+  It picks up every menu bar item, with its shortcut, so one line gives an
+  existing app a palette:
+  ```java
+  DCommandPalette.install(frame)
+          .addOutlookBar(nav)                                  // "Go to" every screen
+          .addCommand(Command.of("Data", "Refresh", this::refresh));
   ```
 - **`ConfirmCloser`**: an "are you sure?" prompt that works as both a
   `WindowListener` and an `ActionListener`, so the close button and a

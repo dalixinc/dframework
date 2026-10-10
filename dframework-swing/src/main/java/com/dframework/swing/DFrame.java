@@ -54,6 +54,7 @@ public class DFrame extends JFrame {
     private CloseAction closeAction;
     private transient ConfirmCloser closer;
     private boolean lafDecorated;
+    private transient WindowMemory memory;
 
     /** An untitled frame with the {@linkplain #setDefaultIcon default icon} that exits the application on close. */
     public DFrame() {
@@ -178,6 +179,27 @@ public class DFrame extends JFrame {
     }
 
     /**
+     * Remembers this frame's position, size and maximised state under
+     * {@code id} between runs, and restores what was saved last time. Use an id
+     * unique to your application, e.g. {@code "tracker2.main"}.
+     *
+     * @return whether saved bounds were restored
+     * @see WindowMemory
+     */
+    public boolean rememberBounds(String id) {
+        if (memory != null) {
+            memory.uninstall();
+        }
+        memory = WindowMemory.install(this, id);
+        return memory.restore();
+    }
+
+    /** The window memory, if {@link #rememberBounds(String)} was called. */
+    public Optional<WindowMemory> getWindowMemory() {
+        return Optional.ofNullable(memory);
+    }
+
+    /**
      * Puts the window into {@code state}. If the platform cannot maximise,
      * {@link WindowState#MAXIMIZED} falls back to filling the usable screen area.
      */
@@ -285,6 +307,7 @@ public class DFrame extends JFrame {
         private Component content;
         private JMenuBar menuBar;
         private boolean lafDecorated;
+        private String rememberId;
 
         private Builder() {
         }
@@ -352,6 +375,16 @@ public class DFrame extends JFrame {
             return this;
         }
 
+        /**
+         * Remembers position, size and maximised state between runs under
+         * {@code id}. Saved values take precedence over {@link #bounds},
+         * {@link #size} and {@link #windowState}. See {@link DFrame#rememberBounds(String)}.
+         */
+        public Builder rememberBounds(String id) {
+            this.rememberId = Objects.requireNonNull(id, "id");
+            return this;
+        }
+
         /** See {@link DFrame#setLafDecorated(boolean)}. */
         public Builder lafDecorated(boolean lafDecorated) {
             this.lafDecorated = lafDecorated;
@@ -382,7 +415,10 @@ public class DFrame extends JFrame {
                 }
                 frame.setLocationRelativeTo(null);
             }
-            frame.setWindowState(windowState);
+            boolean restored = rememberId != null && frame.rememberBounds(rememberId);
+            if (!restored) {
+                frame.setWindowState(windowState);
+            }
             return frame;
         }
 

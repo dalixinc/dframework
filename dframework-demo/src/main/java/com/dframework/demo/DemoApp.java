@@ -3,6 +3,7 @@ package com.dframework.demo;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.event.KeyEvent;
+import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
@@ -21,8 +22,12 @@ import javax.swing.SwingUtilities;
 
 import com.dframework.swing.CloseAction;
 import com.dframework.swing.DFrame;
+import com.dframework.swing.WindowMemory;
+import com.dframework.swing.command.Command;
+import com.dframework.swing.command.DCommandPalette;
 import com.dframework.swing.dialog.MessageIcons;
 import com.dframework.swing.nav.DOutlookBar;
+import com.dframework.swing.notify.DToast;
 import com.dframework.swing.theme.DTheme;
 import com.dframework.swing.theme.ThemeManager;
 import com.dframework.swing.util.DResources;
@@ -58,8 +63,9 @@ public final class DemoApp {
     private static void createAndShow() {
         JLabel status = new JLabel();
         status.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-        ThemeManager.addThemeListener(theme -> status.setText("Theme: " + theme.displayName()));
-        ThemeManager.current().ifPresent(theme -> status.setText("Theme: " + theme.displayName()));
+        String hint = "      Press Ctrl+Shift+P for the command palette";
+        ThemeManager.addThemeListener(theme -> status.setText("Theme: " + theme.displayName() + hint));
+        ThemeManager.current().ifPresent(theme -> status.setText("Theme: " + theme.displayName() + hint));
 
         CardLayout cards = new CardLayout();
         JPanel screens = new JPanel(cards);
@@ -77,8 +83,11 @@ public final class DemoApp {
                 .lafDecorated(true)
                 .content(root)
                 .size(1000, 640)
+                .rememberBounds("dframework.demo.main")
                 .build();
-        frame.setJMenuBar(menuBar(frame, nav));
+        DCommandPalette palette = DCommandPalette.install(frame).addOutlookBar(nav);
+        palette.addCommands(windowCommands(frame));
+        frame.setJMenuBar(menuBar(frame, nav, palette));
         frame.setVisible(true);
     }
 
@@ -130,9 +139,27 @@ public final class DemoApp {
         return DResources.load(ICONS + name).orElseThrow();
     }
 
-    private static JMenuBar menuBar(DFrame frame, DOutlookBar nav) {
+    /** Extra commands that exist only in the palette. */
+    private static List<Command> windowCommands(DFrame frame) {
+        return List.of(
+                Command.of("Window", "Maximize", frame::maximize),
+                Command.of("Window", "Restore", frame::restore),
+                Command.of("Window", "Centre on Screen", () -> frame.setLocationRelativeTo(null)),
+                Command.of("Window", "Forget Saved Position", () -> {
+                    frame.getWindowMemory().ifPresent(WindowMemory::forget);
+                    DToast.info(frame, "Next time, the demo opens at its default size and position.");
+                }),
+                Command.of("Notify", "Say Hello", () -> DToast.success(frame, "Hello from the command palette!")));
+    }
+
+    private static JMenuBar menuBar(DFrame frame, DOutlookBar nav, DCommandPalette palette) {
         JMenu file = new JMenu("File");
         file.setMnemonic(KeyEvent.VK_F);
+        JMenuItem commands = new JMenuItem("Command Palette...");
+        commands.setAccelerator(DCommandPalette.DEFAULT_KEY_STROKE);
+        commands.addActionListener(e -> palette.open());
+        file.add(commands);
+        file.addSeparator();
         JMenuItem exit = new JMenuItem("Exit");
         exit.setMnemonic(KeyEvent.VK_X);
         exit.setAccelerator(KeyStroke.getKeyStroke("ctrl Q"));
