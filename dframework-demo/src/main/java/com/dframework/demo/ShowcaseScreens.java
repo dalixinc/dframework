@@ -23,13 +23,14 @@ import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
-import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingConstants;
 
 import com.dframework.swing.button.DToggleSwitch;
+import com.dframework.swing.table.DTable;
+import com.dframework.swing.table.DTablePanel;
 import com.dframework.swing.theme.DTheme;
 import com.dframework.swing.theme.ThemeManager;
 
@@ -107,20 +108,13 @@ final class ShowcaseScreens {
         form.add(field, c);
     }
 
-    static JComponent table() {
-        String[] columns = {"Component", "Since", "Status"};
-        Object[][] rows = {
-                {"DFrame", 2001, "Modernised"},
-                {"ConfirmCloser", 2026, "New (was QCloser + DCloser)"},
-                {"ThemeManager", 2026, "New (was DLookAndFeelManager)"},
-                {"DTheme", 2026, "New (was KnownLookAndFeels)"},
-                {"MessageIcons", 2026, "New: the classic animated dialog icons"},
-                {"DTextField", 2007, "Rebuilt: validation and focus highlight"},
-                {"DOutlookBar", 2007, "Rebuilt from the Tracker 2 (VB6, 2005) design"},
-        };
-        JTable table = new JTable(rows, columns);
-        table.setAutoCreateRowSorter(true);
-        return new JScrollPane(table);
+    /** The searchable call log; {@code filter} pre-fills the search box. */
+    static JComponent calls(String filter) {
+        DTable table = new DTable(new CallLog(300));
+        table.packColumns(320);
+        DTablePanel panel = new DTablePanel(table);
+        table.setFilterText(filter);
+        return panel;
     }
 
     static JComponent notes() {

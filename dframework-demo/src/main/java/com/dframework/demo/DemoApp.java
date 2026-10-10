@@ -99,16 +99,15 @@ public final class DemoApp {
         addScreen(showcase, screens, cards, "Controls", "ScreenPos.GIF", ShowcaseScreens.controls());
         addScreen(showcase, screens, cards, "Fields", "check.GIF", FieldsScreen.create());
         addScreen(showcase, screens, cards, "Toasts", "food24.gif", ToastsScreen.create());
-        addScreen(showcase, screens, cards, "Table", "BOOK02.GIF", ShowcaseScreens.table());
+        addScreen(showcase, screens, cards, "Table", "BOOK02.GIF", ShowcaseScreens.calls(""));
         addScreen(showcase, screens, cards, "Notes", "Log.gif", ShowcaseScreens.notes());
 
         // A tribute to the VB6 bar this control is modelled on.
         DOutlookBar.Group tracker = bar.addGroup("Tracker 2");
-        for (String[] item : new String[][] {
-                {"Log Call", "FILM01.GIF"}, {"Open Call", "cdrom1.gif"},
-                {"My Calls", "company.gif"}, {"Time\nSheet", "food25.gif"}}) {
-            addPlaceholder(tracker, screens, cards, item[0], item[1]);
-        }
+        addPlaceholder(tracker, screens, cards, "Log Call", "FILM01.GIF");
+        addPlaceholder(tracker, screens, cards, "Open Call", "cdrom1.gif");
+        addScreen(tracker, screens, cards, "My Calls", "company.gif", ShowcaseScreens.calls("engineer:dale -closed"));
+        addPlaceholder(tracker, screens, cards, "Time\nSheet", "food25.gif");
 
         DOutlookBar.Group admin = bar.addGroup("Admin");
         addPlaceholder(admin, screens, cards, "Users", "chgpwd.GIF");

@@ -85,6 +85,21 @@ SwingUtilities.invokeLater(() -> DFrame.builder()
   DToast.builder(frame).type(DToast.Type.WARNING).title("Deleted 3 calls")
           .message("They are in the bin for 30 days.").action("Undo", this::undo).show();
   ```
+- **`DTable`** / **`DTablePanel`**: a `JTable` that's ready to use, with
+  sorting, striped rows, an "empty" message and `packColumns()`. It also
+  filters live as you type, highlighting matches in the cells. The filter
+  syntax:
+  - words: `acme printer` (all must match)
+  - phrases: `"printer fault"`
+  - exclusions: `-closed`
+  - single columns: `status:open` or `pri:high`
+
+  `DTablePanel` adds a search box (Ctrl+F) and a "12 of 300 rows" count:
+  ```java
+  DTablePanel calls = new DTablePanel(new DTable(callModel));
+  ```
+- **`DSearchField`**: a search box with a magnifier, a clear button, Esc to
+  clear, and debounced `onSearch(...)` callbacks.
 - **`DCommandPalette`**: <kbd>Ctrl+Shift+P</kbd> opens a searchable list
   of everything the app can do, as in modern editors. Fuzzy matching means
   `fdark` finds *Theme › FlatLaf Dark*. Recently used commands come first.
