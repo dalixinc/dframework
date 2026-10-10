@@ -1047,8 +1047,8 @@ checking, and sometimes a follow-up command to try.
 - **Audit:** every explanation is recorded in the audit log with the model,
   tokens and outcome.
 
-To set it up, give the application an Anthropic API key (from
-[console.anthropic.com](https://console.anthropic.com)) and restart:
+To set it up, give the application an Anthropic API key (from the Claude
+Console at [platform.claude.com](https://platform.claude.com)) and restart:
 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...

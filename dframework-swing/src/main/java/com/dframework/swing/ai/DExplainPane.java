@@ -1,4 +1,4 @@
-package com.dframework.dig;
+package com.dframework.swing.ai;
 
 import java.awt.BorderLayout;
 import java.awt.Font;
@@ -17,24 +17,35 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingWorker;
 
-import com.dframework.swing.ai.AiAnswer;
-import com.dframework.swing.ai.AiAssistant;
-import com.dframework.swing.ai.AiException;
-import com.dframework.swing.ai.AiPrompt;
+import java.util.prefs.Preferences;
+
+import com.dframework.swing.audit.AuditLog;
 import com.dframework.swing.panel.DCollapsiblePane;
-import com.dframework.swing.plugin.PluginContext;
 
 /**
- * The "AI explanation" tab: the model's explanation of the last result,
+ * An "AI explanation" panel: an assistant's explanation of some result,
  * written in as it arrives, with exactly what was sent available beneath.
+ *
+ * <ul>
+ * <li><b>Disclosure:</b> it says where the data goes.
+ * <li><b>Footer:</b> shows the model, tokens and time.
+ * <li><b>Audit:</b> each explanation is recorded as an {@code "explain"} entry.
+ * <li><b>Not set up:</b> it shows the assistant's setup hint and sends nothing.
+ * </ul>
+ *
+ * <pre>{@code
+ * DExplainPane explain = new DExplainPane(ai, auditLog, "com.example.tool", prefs);
+ * explain.explain("ping -c 3 example.com", new AiPrompt(system, user));
+ * }</pre>
  */
-final class DigExplainPanel extends JPanel {
+public class DExplainPane extends JPanel {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private final transient PluginContext context;
     private final transient AiAssistant ai;
+    private final transient AuditLog log;
+    private final String source;
     private final JTextArea answer = new JTextArea();
     private final JTextArea sent = new JTextArea();
     private final JLabel footer = new JLabel(" ");
@@ -42,13 +53,18 @@ final class DigExplainPanel extends JPanel {
     private transient SwingWorker<AiAnswer, String> worker;
     private transient Runnable onStateChange = () -> { };
 
-    DigExplainPanel(PluginContext context, AiAssistant ai) {
+    /**
+     * @param source      the audit source for "explain" entries, e.g. a plugin id
+     * @param preferences where to remember whether "What was sent" is open
+     */
+    public DExplainPane(AiAssistant ai, AuditLog log, String source, Preferences preferences) {
         super(new BorderLayout(0, 6));
-        this.context = context;
         this.ai = ai;
+        this.log = log;
+        this.source = source;
         setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-        JLabel disclosure = new JLabel(ai.name() + " (" + ai.model() + "). Explaining sends the dig command and its output to "
+        JLabel disclosure = new JLabel(ai.name() + " (" + ai.model() + "). Explaining sends the command and its output to "
                 + ai.provider() + ".");
         disclosure.setEnabled(false);
         add(disclosure, BorderLayout.NORTH);
@@ -58,7 +74,7 @@ final class DigExplainPanel extends JPanel {
         answer.setWrapStyleWord(true);
         answer.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
         answer.setFont(answer.getFont().deriveFont(answer.getFont().getSize2D() + 1f));
-        answer.setText(ai.setupHint().orElse("Run a lookup, then press \"Explain with AI\" to have "
+        answer.setText(ai.setupHint().orElse("Run a command, then press \"Explain with AI\" to have "
                 + ai.name() + " explain the result in plain English."));
         answer.getAccessibleContext().setAccessibleName("AI explanation");
         add(new JScrollPane(answer), BorderLayout.CENTER);
@@ -68,7 +84,7 @@ final class DigExplainPanel extends JPanel {
         sent.setFont(new Font(Font.MONOSPACED, Font.PLAIN, sent.getFont().getSize()));
         sent.setRows(8);
         sentPane = new DCollapsiblePane("What was sent to " + ai.name(), new JScrollPane(sent), false);
-        sentPane.rememberState(context.preferences(), "explain.sent.expanded");
+        sentPane.rememberState(preferences, "explain.sent.expanded");
 
         JPanel south = new JPanel(new BorderLayout(0, 4));
         footer.setEnabled(false);
@@ -78,24 +94,33 @@ final class DigExplainPanel extends JPanel {
     }
 
     /** Called whenever an explanation starts or finishes, so buttons can update. */
-    void setOnStateChange(Runnable onStateChange) {
+    public void setOnStateChange(Runnable onStateChange) {
         this.onStateChange = onStateChange;
     }
 
-    boolean isRunning() {
+    public boolean isRunning() {
         return worker != null;
     }
 
-    /** Asks the assistant to explain a finished run. */
-    void explain(String command, int exitCode, List<String> output) {
+    /** The assistant used. */
+    public AiAssistant getAssistant() {
+        return ai;
+    }
+
+    /** Shows a message in place of an explanation, e.g. why there's nothing to explain. */
+    public void showMessage(String message) {
+        answer.setText(message);
+        footer.setText(" ");
+    }
+
+    /**
+     * Asks the assistant to explain something.
+     *
+     * @param command what produced the result, recorded in the audit entry
+     * @param prompt  what to send
+     */
+    public void explain(String command, AiPrompt prompt) {
         if (worker != null) {
-            return;
-        }
-        AiPrompt prompt;
-        try {
-            prompt = DigExplainPrompt.build(command, exitCode, output);
-        } catch (IllegalArgumentException e) {
-            answer.setText(e.getMessage());
             return;
         }
         if (ai.setupHint().isPresent()) {
@@ -132,7 +157,7 @@ final class DigExplainPanel extends JPanel {
     }
 
     /** Stops the explanation in progress, if any. */
-    void cancel() {
+    public void cancel() {
         if (worker != null) {
             worker.cancel(true);
         }
@@ -169,6 +194,6 @@ final class DigExplainPanel extends JPanel {
             Thread.currentThread().interrupt();
             details.put("outcome", "cancelled");
         }
-        context.audit("explain", details);
+        log.record(source, "explain", details);
     }
 }

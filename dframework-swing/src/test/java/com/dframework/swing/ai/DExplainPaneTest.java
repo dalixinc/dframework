@@ -1,4 +1,4 @@
-package com.dframework.dig;
+package com.dframework.swing.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -11,24 +11,16 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
-import javax.swing.JComponent;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import com.dframework.swing.ai.AiAnswer;
-import com.dframework.swing.ai.AiAssistant;
-import com.dframework.swing.ai.AiException;
-import com.dframework.swing.ai.AiPrompt;
 import com.dframework.swing.audit.AuditLog;
-import com.dframework.swing.command.Command;
-import com.dframework.swing.plugin.DPlugin;
-import com.dframework.swing.plugin.PluginContext;
 
-/** Drives the explanation tab with stand-in assistants; nothing leaves the machine. */
-class DigExplainPanelTest {
+/** Drives the explanation panel with stand-in assistants; nothing leaves the machine. */
+class DExplainPaneTest {
 
     private final AuditLog audit = AuditLog.inMemory();
     private final Preferences settings = Preferences.userRoot().node("com/dframework/test/" + UUID.randomUUID());
@@ -57,18 +49,13 @@ class DigExplainPanelTest {
         }
     }
 
-    private PluginContext context() {
-        DPlugin plugin = new DigPlugin();
-        return new PluginContext() {
-            public DPlugin plugin() { return plugin; }
-            public JComponent component() { return null; }
-            public AuditLog auditLog() { return audit; }
-            public Preferences preferences() { return settings; }
-            public void addCommand(Command command) { }
-        };
+    private static final AiPrompt PROMPT = new AiPrompt("Explain.", "Explain this.");
+
+    private DExplainPane pane(AiAssistant ai) {
+        return new DExplainPane(ai, audit, "test.tool", settings);
     }
 
-    private static String answerText(DigExplainPanel panel) {
+    private static String answerText(DExplainPane panel) {
         return firstTextArea(panel).getText();
     }
 
@@ -87,7 +74,7 @@ class DigExplainPanelTest {
         return null;
     }
 
-    private static void waitUntilIdle(DigExplainPanel panel) throws Exception {
+    private static void waitUntilIdle(DExplainPane panel) throws Exception {
         for (int i = 0; i < 100; i++) {
             boolean[] running = new boolean[1];
             SwingUtilities.invokeAndWait(() -> running[0] = panel.isRunning());
@@ -101,10 +88,10 @@ class DigExplainPanelTest {
 
     @Test
     void showsTheStreamedExplanationAndAuditsIt() throws Exception {
-        DigExplainPanel[] panel = new DigExplainPanel[1];
+        DExplainPane[] panel = new DExplainPane[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new DigExplainPanel(context(), new FakeAi(List.of("gmail.com uses ", "five mail servers."), null, null));
-            panel[0].explain("dig gmail.com MX", 0, List.of("gmail.com. 300 IN MX 5 a.example."));
+            panel[0] = pane(new FakeAi(List.of("gmail.com uses ", "five mail servers."), null, null));
+            panel[0].explain("dig gmail.com MX", PROMPT);
         });
         waitUntilIdle(panel[0]);
 
@@ -119,10 +106,10 @@ class DigExplainPanelTest {
 
     @Test
     void whenNotSetUpItShowsHowAndSendsNothing() throws Exception {
-        DigExplainPanel[] panel = new DigExplainPanel[1];
+        DExplainPane[] panel = new DExplainPane[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new DigExplainPanel(context(), new FakeAi(List.of(), null, "Set FAKE_KEY first."));
-            panel[0].explain("dig example.com A", 0, List.of("output"));
+            panel[0] = pane(new FakeAi(List.of(), null, "Set FAKE_KEY first."));
+            panel[0].explain("dig example.com A", PROMPT);
         });
 
         assertThat(panel[0].isRunning()).isFalse();
@@ -133,10 +120,10 @@ class DigExplainPanelTest {
     @Test
     void failuresAreShownAndAudited() throws Exception {
         AiException rateLimited = new AiException(AiException.Kind.RATE_LIMITED, "Busy, try again shortly.", null);
-        DigExplainPanel[] panel = new DigExplainPanel[1];
+        DExplainPane[] panel = new DExplainPane[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new DigExplainPanel(context(), new FakeAi(List.of(), rateLimited, null));
-            panel[0].explain("dig example.com A", 0, List.of("output"));
+            panel[0] = pane(new FakeAi(List.of(), rateLimited, null));
+            panel[0].explain("dig example.com A", PROMPT);
         });
         waitUntilIdle(panel[0]);
 

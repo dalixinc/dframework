@@ -2,7 +2,8 @@ package com.dframework.dig;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
+
+import com.dframework.swing.exec.CommandLines;
 
 /**
  * Turns {@link DigOptions} into the exact argument list that is executed, and
@@ -18,8 +19,6 @@ public final class DigCommand {
 
     /** The program run. Found on the PATH, as it would be in a terminal. */
     public static final String EXECUTABLE = "dig";
-
-    private static final Pattern SAFE = Pattern.compile("[A-Za-z0-9@%+=:,./_-]+");
 
     private DigCommand() {
     }
@@ -59,13 +58,6 @@ public final class DigCommand {
      * would treat specially are single-quoted, so the text can be pasted safely.
      */
     public static String display(List<String> arguments) {
-        StringBuilder line = new StringBuilder();
-        for (String arg : arguments) {
-            if (line.length() > 0) {
-                line.append(' ');
-            }
-            line.append(SAFE.matcher(arg).matches() ? arg : "'" + arg.replace("'", "'\\''") + "'");
-        }
-        return line.toString();
+        return CommandLines.display(arguments);
     }
 }

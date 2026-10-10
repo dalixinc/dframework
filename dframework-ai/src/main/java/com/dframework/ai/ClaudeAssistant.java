@@ -94,7 +94,7 @@ public final class ClaudeAssistant implements AiAssistant {
     public Optional<String> setupHint() {
         return clientSupplied || hasCredentials() ? Optional.empty() : Optional.of(
                 "To use Claude, set the ANTHROPIC_API_KEY environment variable (or run \"ant auth login\")"
-                + " and restart the application. Get a key at https://console.anthropic.com.");
+                + " and restart the application. Get a key at https://platform.claude.com (Settings, API keys).");
     }
 
     @Override

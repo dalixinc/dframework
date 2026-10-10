@@ -2,18 +2,13 @@ package com.dframework.dig;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.io.IOException;
 import java.io.Serial;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -23,12 +18,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
-import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -43,14 +35,15 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
-import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 
-import com.dframework.swing.audit.AuditLog;
+import com.dframework.swing.ai.DExplainPane;
 import com.dframework.swing.button.DToggleSwitch;
+import com.dframework.swing.exec.CommandRunner;
+import com.dframework.swing.exec.DCommandPane;
 import com.dframework.swing.field.DTextField;
 import com.dframework.swing.notify.DToast;
 import com.dframework.swing.panel.DCollapsiblePane;
@@ -67,7 +60,6 @@ final class DigView extends JPanel {
     private static final Color GOOD = new Color(0x27AE60);
     private static final Color WARN = new Color(0xD08C00);
     private static final Color BAD = new Color(0xE0443E);
-    private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
     private static final String[][] SERVERS = {
             {"System resolver", ""}, {"Cloudflare  1.1.1.1", "1.1.1.1"}, {"Google  8.8.8.8", "8.8.8.8"},
             {"Quad9  9.9.9.9", "9.9.9.9"}, {"OpenDNS  208.67.222.222", "208.67.222.222"}};
@@ -83,7 +75,7 @@ final class DigView extends JPanel {
     private final JButton run = new JButton("Dig");
     private final JButton stop = new JButton("Stop");
     private final JButton explain = new JButton("Explain with AI");
-    private final transient DigExplainPanel explainPanel;
+    private final transient DExplainPane explainPanel;
     /** The last finished run, for explaining: display command, exit code, output. */
     private transient LastRun lastRun;
 
@@ -96,18 +88,20 @@ final class DigView extends JPanel {
     private final JTextArea raw = new JTextArea();
     private final JTabbedPane results = new JTabbedPane();
 
-    private final JTextField commandLine = new JTextField();
-    private final HistoryModel history = new HistoryModel();
+    private final DCommandPane commandPane;
     private final DCollapsiblePane underTheHood;
 
-    private transient DigRunner runner;
-    private transient Consumer<AuditLog.Entry> historyListener;
+    private transient CommandRunner runner;
 
     DigView(PluginContext context) {
         super(new BorderLayout(0, 8));
         this.context = context;
-        this.digAvailable = DigRunner.locate(DigCommand.EXECUTABLE).isPresent();
-        this.explainPanel = context.ai().map(ai -> new DigExplainPanel(context, ai)).orElse(null);
+        this.digAvailable = CommandRunner.locate(DigCommand.EXECUTABLE).isPresent();
+        this.explainPanel = context.ai()
+                .map(ai -> new DExplainPane(ai, context.auditLog(), context.plugin().id(), context.preferences()))
+                .orElse(null);
+        this.commandPane = new DCommandPane(context.auditLog(), context.plugin().id(), "run");
+        commandPane.setCaption("This is the command that runs when you press Dig:");
         setBorder(BorderFactory.createEmptyBorder(4, 12, 12, 12));
 
         JPanel top = new JPanel(new BorderLayout(0, 6));
@@ -130,7 +124,7 @@ final class DigView extends JPanel {
         }
         add(results, BorderLayout.CENTER);
 
-        underTheHood = new DCollapsiblePane("Under the hood", underTheHoodContent());
+        underTheHood = new DCollapsiblePane("Under the hood", commandPane);
         underTheHood.rememberState(context.preferences(), "underTheHood.expanded");
         add(underTheHood, BorderLayout.SOUTH);
 
@@ -225,63 +219,6 @@ final class DigView extends JPanel {
         return banner;
     }
 
-    private JComponent underTheHoodContent() {
-        commandLine.setEditable(false);
-        commandLine.setFont(monospace(commandLine.getFont()).deriveFont(Font.BOLD));
-        commandLine.getAccessibleContext().setAccessibleName("Command that will run");
-        JButton copy = new JButton("Copy");
-        copy.setToolTipText("Copy the command, to run it yourself in a terminal");
-        copy.addActionListener(e -> copyCommand());
-        JPanel commandRow = new JPanel(new BorderLayout(8, 0));
-        commandRow.add(new JLabel("$"), BorderLayout.WEST);
-        commandRow.add(commandLine, BorderLayout.CENTER);
-        commandRow.add(copy, BorderLayout.EAST);
-
-        DTable historyTable = new DTable(history);
-        historyTable.setEmptyText("Commands you run appear here.");
-        historyTable.getColumnModel().getColumn(0).setPreferredWidth(70);
-        historyTable.getColumnModel().getColumn(1).setPreferredWidth(90);
-        historyTable.getColumnModel().getColumn(2).setPreferredWidth(60);
-        historyTable.getColumnModel().getColumn(3).setPreferredWidth(520);
-        JScrollPane historyScroll = new JScrollPane(historyTable);
-        historyScroll.setPreferredSize(new Dimension(400, 110));
-
-        String where = context.auditLog().file().map(Object::toString).orElse("memory only, not saved to a file");
-        JLabel auditNote = new JLabel("Every run is recorded in the audit log: " + where);
-        auditNote.setEnabled(false);
-
-        JPanel content = new JPanel();
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        JLabel nextLabel = new JLabel("This is the command that runs when you press Dig:");
-        JLabel historyLabel = new JLabel("Run this session:");
-        for (JComponent part : List.of(nextLabel, commandRow, historyLabel, historyScroll, auditNote)) {
-            part.setAlignmentX(LEFT_ALIGNMENT);
-        }
-        content.add(nextLabel);
-        content.add(Box.createVerticalStrut(4));
-        content.add(commandRow);
-        content.add(Box.createVerticalStrut(10));
-        content.add(historyLabel);
-        content.add(Box.createVerticalStrut(4));
-        content.add(historyScroll);
-        content.add(Box.createVerticalStrut(6));
-        content.add(auditNote);
-        content.setBorder(BorderFactory.createEmptyBorder(4, 18, 4, 4));
-
-        for (AuditLog.Entry entry : context.auditLog().recent(context.plugin().id())) {
-            if (entry.action().equals("run")) {
-                history.add(entry);
-            }
-        }
-        historyListener = entry -> {
-            if (entry.source().equals(context.plugin().id()) && entry.action().equals("run")) {
-                SwingUtilities.invokeLater(() -> history.add(entry));
-            }
-        };
-        context.auditLog().addListener(historyListener);
-        return content;
-    }
-
     private void wireUp() {
         DocumentListener preview = new DocumentListener() {
             @Override
@@ -349,8 +286,7 @@ final class DigView extends JPanel {
     }
 
     private void updatePreview() {
-        commandLine.setText(previewCommand());
-        commandLine.setCaretPosition(0);
+        commandPane.setCommand(previewCommand());
     }
 
     /** Runs dig with the form's current options. */
@@ -373,12 +309,12 @@ final class DigView extends JPanel {
         records.setRecords(List.of());
         status.setForeground(name.getForeground());
         status.setText("Running…  " + display);
-        DigRunner current = new DigRunner();
+        CommandRunner current = new CommandRunner();
         runner = current;
         updateButtons();
-        new SwingWorker<DigRunner.Outcome, String>() {
+        new SwingWorker<CommandRunner.Outcome, String>() {
             @Override
-            protected DigRunner.Outcome doInBackground() throws Exception {
+            protected CommandRunner.Outcome doInBackground() throws Exception {
                 return current.run(command, this::publish);
             }
 
@@ -403,7 +339,7 @@ final class DigView extends JPanel {
     }
 
     void cancel() {
-        DigRunner current = runner;
+        CommandRunner current = runner;
         if (current != null) {
             current.cancel();
         }
@@ -418,7 +354,12 @@ final class DigView extends JPanel {
             return;
         }
         results.setSelectedComponent(explainPanel);
-        explainPanel.explain(lastRun.command(), lastRun.exitCode(), lastRun.lines());
+        try {
+            explainPanel.explain(lastRun.command(),
+                    DigExplainPrompt.build(lastRun.command(), lastRun.exitCode(), lastRun.lines()));
+        } catch (IllegalArgumentException tooLong) {
+            explainPanel.showMessage(tooLong.getMessage());
+        }
     }
 
     boolean canExplain() {
@@ -436,12 +377,11 @@ final class DigView extends JPanel {
     /** Stops any running lookup and detaches from the audit log. */
     void dispose() {
         cancel();
-        context.auditLog().removeListener(historyListener);
+        commandPane.dispose();
     }
 
     void copyCommand() {
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(previewCommand()), null);
-        DToast.info(this, "Command copied. Paste it into a terminal to run it yourself.");
+        commandPane.copyCommand();
     }
 
     void toggleUnderTheHood() {
@@ -452,7 +392,7 @@ final class DigView extends JPanel {
         name.requestFocusInWindow();
     }
 
-    private void finished(DigOptions options, String display, DigRunner.Outcome outcome) {
+    private void finished(DigOptions options, String display, CommandRunner.Outcome outcome) {
         lastRun = outcome.cancelled() ? null : new LastRun(display, outcome.exitCode(), outcome.lines());
         DigOutput.Result result = DigOutput.parse(outcome.lines(), options);
         records.setRecords(result.records());
@@ -501,7 +441,7 @@ final class DigView extends JPanel {
         context.audit("run", details);
     }
 
-    private static String summaryText(DigOutput.Summary s, DigRunner.Outcome outcome) {
+    private static String summaryText(DigOutput.Summary s, CommandRunner.Outcome outcome) {
         List<String> parts = new ArrayList<>();
         if (s.status() != null) {
             parts.add(s.status());
@@ -609,49 +549,6 @@ final class DigView extends JPanel {
                 case 3 -> r.dnsClass();
                 case 4 -> r.type();
                 default -> r.data();
-            };
-        }
-    }
-
-    /** Commands run this session, newest first, from the audit log. */
-    static final class HistoryModel extends AbstractTableModel {
-
-        @Serial
-        private static final long serialVersionUID = 1L;
-
-        private static final String[] COLUMNS = {"Time", "Result", "ms", "Command"};
-        private final transient List<AuditLog.Entry> rows = new ArrayList<>();
-
-        void add(AuditLog.Entry entry) {
-            rows.add(0, entry);
-            fireTableRowsInserted(0, 0);
-        }
-
-        @Override
-        public int getRowCount() {
-            return rows.size();
-        }
-
-        @Override
-        public int getColumnCount() {
-            return COLUMNS.length;
-        }
-
-        @Override
-        public String getColumnName(int column) {
-            return COLUMNS[column];
-        }
-
-        @Override
-        public Object getValueAt(int row, int column) {
-            AuditLog.Entry e = rows.get(row);
-            Map<String, String> d = e.details();
-            return switch (column) {
-                case 0 -> CLOCK.format(e.time());
-                case 1 -> d.getOrDefault("outcome", "") + (d.get("exitCode") != null && !"0".equals(d.get("exitCode"))
-                        ? " (" + d.get("exitCode") + ")" : "");
-                case 2 -> d.getOrDefault("durationMs", "");
-                default -> d.getOrDefault("command", "");
             };
         }
     }
