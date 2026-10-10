@@ -126,7 +126,9 @@ final class DigView extends JPanel {
 
         underTheHood = new DCollapsiblePane("Under the hood", commandPane);
         underTheHood.rememberState(context.preferences(), "underTheHood.expanded");
-        add(underTheHood, BorderLayout.SOUTH);
+        // A split, so the details never squeeze the results; collapsing gives the room back.
+        remove(results);
+        add(DCollapsiblePane.splitBelow(results, underTheHood), BorderLayout.CENTER);
 
         restoreSettings();
         wireUp();

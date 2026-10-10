@@ -70,4 +70,18 @@ class GitPresetTest {
         assertThat(CommandLines.display(GitCommands.ENVIRONMENT, GitPreset.STATUS.command(REPO, "", 1)))
                 .isEqualTo("GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 git -C /home/dale/repo --no-pager status --short --branch");
     }
+
+    @Test
+    void emptyOutputGetsAPlainEnglishNote() {
+        assertThat(GitPreset.DIFF_STAGED.note(List.of())).contains("Nothing is staged.");
+        assertThat(GitPreset.STASHES.note(List.of(""))).contains("No stashes.");
+        assertThat(GitPreset.LOG.note(List.of("* abc123 First"))).isEmpty();
+    }
+
+    @Test
+    void aCleanStatusSaysSo() {
+        assertThat(GitPreset.STATUS.note(List.of("## main...origin/main")))
+                .contains("Nothing to commit: the working tree is clean.");
+        assertThat(GitPreset.STATUS.note(List.of("## main", " M README.md"))).isEmpty();
+    }
 }

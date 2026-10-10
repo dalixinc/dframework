@@ -129,7 +129,9 @@ final class GitView extends JPanel {
 
         underTheHood = new DCollapsiblePane("Under the hood", commandPane);
         underTheHood.rememberState(context.preferences(), "underTheHood.expanded");
-        add(underTheHood, BorderLayout.SOUTH);
+        // A split, so the details never squeeze the results; collapsing gives the room back.
+        remove(tabs);
+        add(DCollapsiblePane.splitBelow(tabs, underTheHood), BorderLayout.CENTER);
 
         restoreSettings();
         wireUp();
@@ -252,7 +254,7 @@ final class GitView extends JPanel {
         tab.setBorder(BorderFactory.createEmptyBorder(8, 4, 4, 4));
         tab.add(head, BorderLayout.NORTH);
         tab.add(objectContent, BorderLayout.CENTER);
-        objectText.setText("Inspect an object to see how git stores it. Commits point to a tree and their parents;"
+        showMessage("Inspect an object to see how git stores it. Commits point to a tree and their parents;"
                 + " trees list files (blobs) and folders (trees). Try HEAD, then follow the links.");
         return tab;
     }
@@ -304,6 +306,14 @@ final class GitView extends JPanel {
         if (busy || !gitAvailable || !repositoryField.validateInput()) {
             return;
         }
+        openRepository(true);
+    }
+
+    /**
+     * @param complain whether a folder that isn't in a repository is an error
+     *                 (when the user asked) or just a prompt (when opening by default)
+     */
+    private void openRepository(boolean complain) {
         Path folder = Path.of(repositoryField.getText().strip()).toAbsolutePath().normalize();
         if (!Files.isDirectory(folder)) {
             setRepositoryInfo(BAD, "That folder doesn't exist: " + folder);
@@ -313,13 +323,21 @@ final class GitView extends JPanel {
             CommandRunner.Outcome top = outcomes.get(0);
             if (top.exitCode() != 0 || top.lines().isEmpty()) {
                 repository = null;
-                setRepositoryInfo(BAD, "Not a git repository: " + lastLine(top));
+                if (complain) {
+                    setRepositoryInfo(BAD, "Not a git repository: " + lastLine(top));
+                } else {
+                    repositoryField.setText("");
+                    repositoryInfo.setForeground(status.getForeground());
+                    repositoryInfo.setEnabled(false);
+                    repositoryInfo.setText("Choose a folder inside a git repository, then press Open.");
+                }
                 updatePreview();
                 return;
             }
             Path root = Path.of(top.lines().get(0).strip());
             execute(List.of(new Step("open", GitCommands.currentBranch(root))), more -> {
                 repository = root;
+                repositoryField.setText(root.toString());
                 String branch = more.get(0).exitCode() == 0 && !more.get(0).lines().isEmpty() ? more.get(0).lines().get(0) : "?";
                 setRepositoryInfo(GOOD, "Open: " + root + "   ·   branch " + branch);
                 context.preferences().put("repository", root.toString());
@@ -335,11 +353,21 @@ final class GitView extends JPanel {
         repositoryInfo.setText(text);
     }
 
-    /** Opens the remembered (or current) folder the first time the plugin is shown. */
+    /**
+     * The first time the plugin is shown, opens the remembered repository, or
+     * else the one containing the folder the application started in. Git finds
+     * the repository from any folder inside it, so starting in a subfolder (as
+     * "gradlew run" does) works too.
+     */
     void openDefaultRepository() {
-        if (repository == null && !repositoryField.getText().isBlank()) {
-            openRepository();
+        if (repository != null || busy || !gitAvailable) {
+            return;
         }
+        boolean remembered = !repositoryField.getText().isBlank();
+        if (!remembered) {
+            repositoryField.setText(System.getProperty("user.dir"));
+        }
+        openRepository(remembered);
     }
 
     // ---- commands tab -----------------------------------------------------------------------
@@ -403,8 +431,10 @@ final class GitView extends JPanel {
             } else if (outcome.exitCode() != 0) {
                 setStatus(BAD, "git reported an error (exit code " + outcome.exitCode() + "): " + lastLine(outcome));
             } else {
-                setStatus(GOOD, p.label() + "  ·  " + count(outcome.lines().size(), "line") + "  ·  "
-                        + outcome.durationMs() + " ms" + (outcome.truncated()
+                Optional<String> note = p.note(outcome.lines());
+                note.ifPresent(text -> output.append((outcome.lines().isEmpty() ? "" : "\n") + "(" + text + ")\n"));
+                setStatus(GOOD, p.label() + "  ·  " + note.orElse(count(outcome.lines().size(), "line"))
+                        + "  ·  " + outcome.durationMs() + " ms" + (outcome.truncated()
                                 ? "  ·  output stopped at " + count(outcome.lines().size(), "line") : ""));
             }
         });
@@ -452,8 +482,7 @@ final class GitView extends JPanel {
                     if (resolved.exitCode() != 0 || type.exitCode() != 0) {
                         objectHeader.setForeground(BAD);
                         objectHeader.setText("No such object: " + spec + "  (" + lastLine(type) + ")");
-                        objectText.setText(String.join("\n", type.lines()));
-                        objectCards.show(objectContent, "text");
+                        showMessage(String.join("\n", type.lines()));
                         return;
                     }
                     String id = resolved.lines().get(0).strip();
@@ -462,14 +491,30 @@ final class GitView extends JPanel {
                     objectHeader.setForeground(status.getForeground());
                     objectHeader.setText(kind + "   " + id + "   ·   " + NumberFormat.getIntegerInstance().format(bytes) + " bytes");
                     if (kind.equals("blob") && bytes > LARGEST_BLOB_SHOWN) {
-                        objectText.setText("This file is " + NumberFormat.getIntegerInstance().format(bytes)
+                        showMessage("This file is " + NumberFormat.getIntegerInstance().format(bytes)
                                 + " bytes, too large to show here. Its id is " + id + ".");
-                        objectCards.show(objectContent, "text");
                         return;
                     }
                     List<String> pretty = GitCommands.catFile(repo, "-p", id);
                     execute(List.of(new Step("inspect", pretty)), second -> show(kind, id, display(pretty), second.get(0)));
                 });
+    }
+
+    /** Prose in the object area: wrapped, and scrolled to the start. */
+    private void showMessage(String text) {
+        objectText.setLineWrap(true);
+        objectText.setWrapStyleWord(true);
+        objectText.setText(text);
+        objectText.setCaretPosition(0);
+        objectCards.show(objectContent, "text");
+    }
+
+    /** Object content (code, a commit): not wrapped, scrolled to the start. */
+    private void showContent(List<String> lines) {
+        objectText.setLineWrap(false);
+        objectText.setText(String.join("\n", lines));
+        objectText.setCaretPosition(0);
+        objectCards.show(objectContent, "text");
     }
 
     private void show(String kind, String id, String command, CommandRunner.Outcome content) {
@@ -483,18 +528,14 @@ final class GitView extends JPanel {
             }
             case "blob" -> {
                 if (GitObjects.looksBinary(content.lines())) {
-                    objectText.setText("This is a binary file, so it isn't shown as text. Its id is " + id + ".");
+                    showMessage("This is a binary file, so it isn't shown as text. Its id is " + id + ".");
                     lastOutput = null;
                 } else {
-                    objectText.setText(String.join("\n", content.lines()));
+                    showContent(content.lines());
                 }
-                objectText.setCaretPosition(0);
-                objectCards.show(objectContent, "text");
             }
             default -> {   // commit or tag
-                objectText.setText(String.join("\n", content.lines()));
-                objectText.setCaretPosition(0);
-                objectCards.show(objectContent, "text");
+                showContent(content.lines());
                 for (GitObjects.Link link : GitObjects.parseLinks(content.lines())) {
                     JButton go = new JButton(link.kind() + " " + link.id().substring(0, 10) + "…");
                     go.setToolTipText("Inspect this " + link.kind() + " (" + link.id() + ")");
@@ -663,12 +704,7 @@ final class GitView extends JPanel {
 
     private void restoreSettings() {
         Preferences p = context.preferences();
-        String remembered = p.get("repository", "");
-        if (remembered.isEmpty()) {
-            Path here = Path.of(System.getProperty("user.dir"));
-            remembered = Files.isDirectory(here.resolve(".git")) ? here.toString() : "";
-        }
-        repositoryField.setText(remembered);
+        repositoryField.setText(p.get("repository", ""));   // blank: openDefaultRepository asks git
         String presetName = p.get("preset", GitPreset.STATUS.name());
         for (GitPreset g : GitPreset.values()) {
             if (g.name().equals(presetName)) {

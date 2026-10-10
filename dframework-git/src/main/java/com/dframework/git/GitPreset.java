@@ -3,6 +3,7 @@ package com.dframework.git;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The common, read-only git commands offered in the browser's menu. There is
@@ -73,6 +74,36 @@ public enum GitPreset {
     /** Whether the command uses the "limit" setting (how many entries to show). */
     public boolean usesLimit() {
         return template.contains("{limit}");
+    }
+
+    /**
+     * A sentence saying what the output means when it needs saying: what an
+     * empty result means for this command, or that a status shows a clean
+     * working tree. Empty when the output speaks for itself.
+     */
+    public Optional<String> note(List<String> output) {
+        boolean empty = output.stream().allMatch(String::isBlank);
+        if (this == STATUS && output.size() == 1 && output.get(0).startsWith("##")) {
+            return Optional.of("Nothing to commit: the working tree is clean.");
+        }
+        if (!empty) {
+            return Optional.empty();
+        }
+        return Optional.of(switch (this) {
+            case LOG, LOG_ALL -> "No commits yet.";
+            case DIFF -> "No unstaged changes: every modified file is staged, or nothing has changed.";
+            case DIFF_STAGED -> "Nothing is staged.";
+            case BRANCHES -> "No branches yet.";
+            case TAGS -> "No tags.";
+            case REMOTES -> "No remotes are set up.";
+            case CONTRIBUTORS -> "No commits yet, so no contributors.";
+            case REFLOG -> "The reflog is empty.";
+            case STASHES -> "No stashes.";
+            case FILES -> "No tracked files.";
+            case FILE_HISTORY -> "No commits changed this file.";
+            case CONFIG -> "This repository has no settings of its own.";
+            default -> "The command printed nothing.";
+        });
     }
 
     /**

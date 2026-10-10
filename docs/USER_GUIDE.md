@@ -866,6 +866,20 @@ details.addPropertyChangeListener(DCollapsiblePane.EXPANDED_PROPERTY, e -> updat
 The header shows ▾ when open and ▸ when closed. It works from the keyboard
 (<kbd>Space</kbd>) and tells screen readers whether the section is open.
 
+To put a collapsible section under the main content, use `splitBelow`. It
+puts the two in a split whose divider the user can drag:
+
+```java
+JTextArea results = new JTextArea();
+DCollapsiblePane underTheHood = new DCollapsiblePane("Under the hood", new JLabel("git status"));
+JSplitPane layout = DCollapsiblePane.splitBelow(new JScrollPane(results), underTheHood);
+```
+
+The section gets the height it asks for, up to a third of the split.
+Collapsing it gives its room back to the main content, so the details never
+squeeze the results they describe. Resizing the window places the divider
+again. DNS Dig and the Git Browser are laid out this way.
+
 ---
 
 ## 17. The audit log: `AuditLog`
@@ -1097,9 +1111,12 @@ record for every command, and an optional AI explanation.
 
 **Opening a repository.** Type or **Browse…** to any folder inside a
 repository and press **Open**. The browser finds the repository's top folder
-and shows the current branch. It remembers the last repository; the first
-time, it opens the folder the application was started from, if that's a
-repository.
+and shows the current branch. It remembers the last repository. The first
+time, it opens the repository containing the folder the application was
+started from. That works from any folder inside the repository, so starting
+the demo with `gradlew run` (which runs in `dframework-demo`) opens
+DFramework itself. If that folder isn't in a repository, the box is left
+empty for you to choose one.
 
 **Commands tab.** Choose from a dropdown of common read-only commands. Each
 has a one-line description:
@@ -1121,7 +1138,10 @@ has a one-line description:
 Where a command needs one, a **Revision** (such as `HEAD~3`, `main` or
 `v1.0`) or **Path** box is enabled, and **Limit** sets how many entries
 commands like `log` show. Output appears as it arrives. Very large output
-stops at 20,000 lines, and the status line says so.
+stops at 20,000 lines, and the status line says so. When a command prints
+nothing, the output says what that means. For example, "Nothing is staged."
+or "No stashes.", and a status with no changes says "Nothing to commit: the
+working tree is clean."
 
 **Objects tab: git's own storage.** Git stores everything as objects:
 *commits* point to a *tree* (a folder listing) and to their *parents*;
@@ -1195,7 +1215,8 @@ context.audit("run", Map.of("command", CommandLines.display(environment, command
 - **`CommandLines.display`** writes a command out as you'd type it, quoting
   what a shell would interpret, so it can be pasted and run.
 - **`DCommandPane`** is the "Under the hood" content. Put it in a
-  `DCollapsiblePane`. Its history lists the audit entries for your plugin
+  `DCollapsiblePane`, and place that below your results with
+  `DCollapsiblePane.splitBelow`. Its history lists the audit entries for your plugin
   and the actions you name.
 - **`DExplainPane`** is the AI explanation panel: `new DExplainPane(ai,
   auditLog, source, preferences)`, then `explain(command, prompt)`. It

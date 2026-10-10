@@ -1,7 +1,10 @@
 package com.dframework.swing.panel;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.io.Serial;
 import java.util.Objects;
 import java.util.prefs.Preferences;
@@ -10,7 +13,9 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.JSplitPane;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
 /**
@@ -112,6 +117,52 @@ public class DCollapsiblePane extends JPanel {
         setExpanded(node.getBoolean(key, expanded));
         this.store = Objects.requireNonNull(node, "node");
         this.storeKey = Objects.requireNonNull(key, "key");
+    }
+
+    /**
+     * Puts {@code main} above {@code details} in a split the user can drag.
+     * {@code details} get their preferred height, but never more than a third, and
+     * collapsing them gives the room back to {@code main}, so the details never
+     * squeeze the content they describe. The user can drag the divider; resizing
+     * the window places it again.
+     *
+     * <pre>{@code
+     * add(DCollapsiblePane.splitBelow(results, new DCollapsiblePane("Under the hood", commands)));
+     * }</pre>
+     */
+    public static JSplitPane splitBelow(JComponent main, DCollapsiblePane details) {
+        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, main, details);
+        split.setResizeWeight(1.0);
+        split.setContinuousLayout(true);
+        split.setBorder(BorderFactory.createEmptyBorder());
+        split.setOneTouchExpandable(false);
+        main.setMinimumSize(new Dimension(0, 80));
+        details.setMinimumSize(new Dimension(0, details.getHeader().getPreferredSize().height));
+        details.addPropertyChangeListener(EXPANDED_PROPERTY, e -> SwingUtilities.invokeLater(() -> fitDetails(split, details)));
+        // Re-place the divider when the window changes size, so a smaller window
+        // shrinks both parts rather than only the main content.
+        split.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                fitDetails(split, details);
+            }
+        });
+        return split;
+    }
+
+    /** Moves the divider so {@code details} gets its preferred height (up to a third), leaving {@code main} at least its minimum. */
+    private static void fitDetails(JSplitPane split, DCollapsiblePane details) {
+        int available = split.getHeight() - split.getDividerSize();
+        if (available <= 0) {
+            return;
+        }
+        int collapsed = details.getMinimumSize().height;
+        // Never more than a third: the details describe the main content, so they mustn't crowd it out.
+        int wanted = details.isExpanded()
+                ? Math.max(collapsed, Math.min(details.getPreferredSize().height, available / 3))
+                : collapsed;
+        int mainMinimum = split.getTopComponent().getMinimumSize().height;
+        split.setDividerLocation(Math.max(mainMinimum, available - wanted));
     }
 
     private void updateHeader() {

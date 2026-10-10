@@ -879,6 +879,17 @@ back.
   revalidates.
 - **Remembering:** `rememberState(node, key)` restores first, then starts
   saving, so restoring doesn't write back the value it has just read.
+- **`splitBelow`:** the plugins first put "Under the hood" in
+  `BorderLayout.SOUTH`. That gives it its full preferred height, and in an
+  ordinary-sized window the results got about 76 pixels. A `JSplitPane`
+  lets the user drag the divider. `fitDetails` places the divider so the
+  section gets its preferred height, capped at a third of the split. The cap
+  is a third, not a half, because the split's upper half also holds the
+  form, so half the split left the output area itself too small. The divider
+  is placed again on every resize, because a resize weight of 1.0 alone
+  takes all of a shrink from the main content, and when the section opens
+  or closes. A drag lasts until the next resize. That's simpler than
+  telling the user's drags apart from layout changes.
 
 ### 6.17 `AuditLog`
 

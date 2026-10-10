@@ -8,6 +8,8 @@ import java.util.UUID;
 import java.util.prefs.Preferences;
 
 import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JSplitPane;
 
 import org.junit.jupiter.api.Test;
 
@@ -60,5 +62,15 @@ class DCollapsiblePaneTest {
                 parent.removeNode();
             }
         }
+    }
+
+    @Test
+    void splitBelowGivesTheExtraSpaceToTheMainComponent() {
+        JPanel main = new JPanel();
+        JSplitPane split = DCollapsiblePane.splitBelow(main, pane);
+        assertThat(split.getTopComponent()).isSameAs(main);
+        assertThat(split.getBottomComponent()).isSameAs(pane);
+        assertThat(split.getResizeWeight()).isEqualTo(1.0);
+        assertThat(pane.getMinimumSize().height).isEqualTo(pane.getHeader().getPreferredSize().height);
     }
 }

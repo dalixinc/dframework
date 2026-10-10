@@ -111,7 +111,7 @@ public class DCommandPane extends JPanel {
         }
         ToolTipManager.sharedInstance().registerComponent(table);
         JScrollPane scroll = new JScrollPane(table);
-        scroll.setPreferredSize(new Dimension(400, 110));
+        scroll.setPreferredSize(new Dimension(400, 92));   // about four rows; the split lets people drag for more
         String where = log.file().map(Object::toString).orElse("memory only, not saved to a file");
         JLabel auditNote = new JLabel("Every command run is recorded in the audit log: " + where);
         auditNote.setEnabled(false);
