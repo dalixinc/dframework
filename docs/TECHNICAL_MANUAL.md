@@ -188,6 +188,7 @@ Most components stand alone. The deliberate couplings are:
 | Tests | JUnit **6.1.3** (Jupiter) + AssertJ **3.27.7** | AssertJ 4 was still a milestone release |
 | Performance | Configuration cache, build cache, parallel | Fast incremental builds |
 | Publishing | `maven-publish` (`publishToMavenLocal`) | Lets other projects depend on DFramework before any public release |
+| Documentation | Markdown in `docs/` is the source of truth. `UserGuideExamplesTest` compiles every Java example in the guide during the build. `docs/site/build_handbook.py` renders both documents as the two-page *DFramework Handbook* | The docs can't drift from the API, and the published pages can't drift from the docs. The script pins Python Markdown 3.10.3 by SHA-256 and fetches it if missing, so it needs no `pip` |
 
 ### Why the `this-escape` lint is disabled
 
@@ -962,6 +963,9 @@ several problems the unit tests couldn't:
   every bug fixed gets a regression test.
 - **Demo:** every component appears in the demo, used as a real
   application would use it.
+- **Docs:** when an API changes, update `docs/USER_GUIDE.md` in the same
+  commit (the build compiles its examples), then regenerate the handbook
+  with `python3 docs/site/build_handbook.py`.
 - **Commits:** one feature per commit, with a message explaining what
   changed and why, including bugs found along the way.
 - **Dependencies:** pin exact versions in `libs.versions.toml`, avoid

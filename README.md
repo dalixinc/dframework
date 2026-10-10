@@ -11,6 +11,19 @@ Java 21.
 - **[Technical Manual](docs/TECHNICAL_MANUAL.md)**: architecture, design
   decisions, the traps we hit, and conventions for contributors.
 
+Both are also published together as the *DFramework Handbook*, a pair of
+web pages generated from these files. To regenerate them after editing the
+docs:
+
+```sh
+python3 docs/site/build_handbook.py   # writes build/handbook/index.html and technical-manual.html
+```
+
+The script needs the Python Markdown package. If it isn't installed, the
+script downloads the pinned release itself and verifies its checksum, so
+`pip` isn't required. The guide's Java examples are compiled by the
+build (`UserGuideExamplesTest`), so they can't drift from the API.
+
 ## Modules
 
 | Module | Contents |
