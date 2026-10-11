@@ -1,0 +1,6 @@
+/* DFramework for JavaFX. AtlantaFX themes draw :danger themselves; this covers Modena and Caspian. */
+.d-text-field:danger {
+    -fx-border-color: #e03e3e;
+    -fx-border-width: 1.5;
+    -fx-border-radius: 3;
+}

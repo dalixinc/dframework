@@ -32,10 +32,14 @@ build (`UserGuideExamplesTest`), so they can't drift from the API.
 | `dframework-demo` | Showcase app: Outlook-bar navigation, live theme switcher, validated fields |
 | `dframework-dig` | **DNS Dig**, a plugin: run `dig` lookups and see exactly what runs |
 | `dframework-git` | **Git Browser**, a plugin: explore a repository read-only, with a drawn commit graph and git's raw objects, and see exactly what runs |
+| `dframework-fx` | **DFramework for JavaFX** (spike): `DStage`, live AtlantaFX themes, and a `DTextField` sharing the Swing library's `Validator` and `InputFilter` |
+| `dframework-fx-demo` | The JavaFX spike's showcase, a modular app (`./gradlew :dframework-fx-demo:run`) |
 | `dframework-time` | **Time in Java**, a plugin for talks: Java's date and time APIs from 1996 to today, then GPS and Einstein, every example compiled and run live |
 | `dframework-ai` | Claude-backed `AiAssistant` (Anthropic Java SDK), found at runtime; powers **Explain with AI** in DNS Dig and the Git Browser |
 
-A JavaFX module is planned.
+JavaFX has begun: a spike (`dframework-fx`) proves the build, themes, shared
+validation and packaging on JavaFX 21 LTS. The plan and findings are in the
+Technical Manual's roadmap.
 
 ## Quick start
 
@@ -211,6 +215,7 @@ Requires JDK 21 (`JAVA_HOME` must point at it).
 ```sh
 ./gradlew build                      # compile, test, javadoc
 ./gradlew :dframework-demo:run       # launch the showcase
+./gradlew :dframework-fx-demo:run    # launch the JavaFX spike
 ```
 
 `DFrameTest` needs a display and skips itself when headless.

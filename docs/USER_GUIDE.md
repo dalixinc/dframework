@@ -71,6 +71,7 @@ cd dframework
 export JAVA_HOME=/path/to/jdk-21
 ./gradlew build                   # compile, run the tests, build the javadoc
 ./gradlew :dframework-demo:run    # launch the showcase
+./gradlew :dframework-fx-demo:run # a first look at DFramework for JavaFX
 ```
 
 ### Use it in your own project

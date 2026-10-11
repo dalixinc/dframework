@@ -138,6 +138,9 @@ graph LR
     time["dframework-time<br/><i>Time in Java plugin</i>"] --> swing
     time --> joda["Joda-Time 2.14.4"]
     demo -. "runtime (ServiceLoader)" .-> time
+    fx["dframework-fx<br/><i>JavaFX (spike)</i>"] --> swing
+    fx --> openjfx["OpenJFX 21.0.12 + AtlantaFX 2.1.0"]
+    fxdemo["dframework-fx-demo<br/><i>JavaFX showcase</i>"] --> fx
     ai["dframework-ai<br/><i>Claude assistant</i>"] --> swing
     ai --> sdk["Anthropic Java SDK 2.65.0"]
     demo -. "runtime (ServiceLoader)" .-> ai
@@ -151,6 +154,8 @@ graph LR
 | `dframework-demo` | The showcase (`./gradlew :dframework-demo:run`). It's also the integration test bed: every component is used here as an application would use it |
 | `dframework-ai` | `ClaudeAssistant`, an `AiAssistant` backed by the Anthropic Java SDK. Optional, so the library itself carries no SDK dependencies; found through `ServiceLoader` |
 | `dframework-git` | The Git Browser plugin. Like DNS Dig, the demo has it only on its runtime classpath |
+| `dframework-fx` | DFramework for JavaFX, so far a spike: `DStage`, `FxTheme`/`FxThemeManager` and `DTextField`. A JPMS module; it borrows `Validator`, `InputFilter` and `CloseAction` from the Swing jar until `dframework-core` exists |
+| `dframework-fx-demo` | The JavaFX showcase, a JPMS application run from the module path |
 | `dframework-time` | The Time in Java plugin, a talk about date and time APIs whose examples are compiled and run live. It brings Joda-Time with it, for the Joda-Time lessons |
 | `dframework-dig` | The DNS Dig plugin. It depends on the library; the demo has it only on its *runtime* classpath and finds it through `ServiceLoader`, which proves the plugin mechanism end to end |
 | `buildSrc` | One convention plugin shared by every module |
@@ -225,6 +230,11 @@ A full JPMS module would make optional third-party look and feels awkward:
 Kunststoff is a classpath-only jar, loaded reflectively by `UIManager`,
 and a named module would need `--add-modules` for it. We'll revisit this
 when the module split for JavaFX happens.
+
+The JavaFX modules (`dframework-fx`, `dframework-fx-demo`) are full JPMS
+modules, because JavaFX supports only the module path. The spike showed
+that the shared core will need a `module-info` too (see the
+[JavaFX spike findings](#the-javafx-spike-findings)).
 
 ### FlatLaf scope and Kunststoff
 
@@ -1377,7 +1387,7 @@ wild.
 
 ## 7. Testing strategy
 
-**299 tests**, all run by `./gradlew build`.
+**307 tests**, all run by `./gradlew build`.
 
 ### Headless first
 
@@ -1541,6 +1551,10 @@ The user's own audit log showed which steps they had taken.
 - **The audit log never rotates.** It grows until someone archives it.
   Rotation, or handing records to the platform's logging, is a possible
   addition.
+- **The JavaFX side is a spike:** a stage, themes and a text field so far.
+  It borrows the shared logic from the Swing jar until `dframework-core`
+  exists. Apps outside this build must pin JavaFX to 21 themselves, and
+  AtlantaFX's own controls draw only in AtlantaFX themes.
 - **Validator and input-filter messages** are English only. The bundle
   is ready for translations.
 
@@ -1548,18 +1562,94 @@ The user's own audit log showed which steps they had taken.
 
 ## 10. Roadmap
 
-**Phase 3: JavaFX**, parked but planned:
+**Phase 3: JavaFX.** The spike is done (see below). The plan:
 
-1. **`dframework-core`:** a toolkit-neutral module holding `Validator`,
-   `InputFilter`, `FuzzyMatcher`, the `TableFilter` grammar and the
-   preferences logic in `WindowMemory`. These have no real Swing
-   dependency.
-2. **`dframework-fx`:** OpenJFX 21, the long-term-support release matching
-   our Java 21, with AtlantaFX as the theme engine, JavaFX's counterpart
-   to FlatLaf.
-3. **First FX components:** the Stage equivalent of `DFrame` (icons,
-   confirm-close, remembered bounds, themes), then the text field and
-   toasts.
+0. ~~**Spike:** `dframework-fx` with `DStage`, live themes and `DTextField`,
+   and a modular demo.~~ Done, October 2026.
+1. **`dframework-core`:** a toolkit-neutral module **with a
+   `module-info`**, holding the toolkit-neutral logic:
+   - `Validator`, `InputFilter`, `CloseAction` and `DFramework`;
+   - `FuzzyMatcher`, the `TableFilter` grammar and the preferences logic
+     in `WindowMemory`;
+   - `AuditLog`, `CommandRunner`, `CommandLines`, `AiAssistant`, the
+     `CommitGraph` layout;
+   - the plugins' engines.
+
+   Swing and JavaFX would both depend on it.
+2. **Foundations:** `DStage`, the theme manager, `DTextField`, toasts, a
+   DFramework `DToggleSwitch` for JavaFX, busy overlays and collapsible
+   sections.
+3. **Navigation and tables:** the Outlook bar, breadcrumbs, the command
+   palette and `DTableView`.
+4. **A plugin API shared by both toolkits** and a JavaFX plugin host. Then
+   the plugins: DNS Dig first, then Git, then Time in Java.
+5. **A JavaFX showcase** like the Swing one, and docs.
+
+### The JavaFX spike: findings
+
+Two new modules: `dframework-fx` (`DStage`, `FxTheme`/`FxThemeManager`,
+`DTextField`) and `dframework-fx-demo`. Both are real JPMS modules, run
+from the module path, JavaFX's supported setup. Run it with
+`./gradlew :dframework-fx-demo:run`. The results:
+
+- **Shared logic works across toolkits.** The JavaFX `DTextField` uses the
+  very same `Validator` and `InputFilter` classes as the Swing one, and
+  `DStage` uses the same `CloseAction`.
+  - **How, for now:** they come from the Swing library as an automatic
+    module. Gradle allowed `requires com.dframework.swing` on a project
+    dependency.
+  - **Why core needs a `module-info`:** javac then insisted on
+    `requires transitive`, because those types appear in the JavaFX API.
+    Automatic modules in public APIs draw lint warnings (suppressed for the
+    spike).
+  - **Swing classes stayed unused:** `Validator` reaches `DResources`, which
+    touches Swing's `ImageIcon`, but it worked on the module path.
+- **JavaFX 21 needed pinning.** AtlantaFX 2.1.0 was built against JavaFX
+  23, and Gradle's highest-version-wins rule silently shipped JavaFX 23. The
+  first distribution had `javafx-*-23.jar`.
+  - **What didn't work:** a `strictly` constraint on the library's API
+    makes Gradle fail on the conflict rather than resolve it.
+  - **What works:** the convention plugin now forces every `org.openjfx`
+    artifact to the catalog's version, in every module.
+  - **Outside this build:** apps using the published library will need the
+    same pin. A Gradle platform (BOM) module is the likely answer when we
+    publish.
+- **Version choices.**
+  - **AtlantaFX 3.0.0** needs Java 25, so it isn't an option on Java 21.
+  - **AtlantaFX 2.1.0** themes and controls work on JavaFX 21.0.12: Primer,
+    Nord, Cupertino and Dracula, light and dark.
+  - **JavaFX 24 and later need newer JDKs.** JavaFX 21 LTS is the line to
+    stay on until DFramework moves past Java 21.
+- **AtlantaFX's own controls only draw in AtlantaFX themes.** Its
+  `ToggleSwitch` is invisible under Modena; only the label shows. So
+  DFramework needs its own JavaFX `DToggleSwitch`, as it has for Swing, to
+  work in every theme.
+- **Themes switch live in one call.** `Application.setUserAgentStylesheet`
+  restyles every window, with no component tree to walk as in Swing's
+  `SwingUtilities.updateComponentTreeUI`.
+  - **Colour overrides:** AtlantaFX exposes its colours as CSS variables
+    (`-color-bg-default`), so the focus highlight overrides them on the node
+    alone. For Modena and Caspian it sets `-fx-control-inner-background`.
+  - **The error outline:** AtlantaFX draws the `:danger` state itself.
+    DFramework's stylesheet draws it for Modena.
+- **JavaFX bindings beat Swing listeners.** `validProperty()` lets an OK
+  button be enabled by one binding:
+  `ok.disableProperty().bind(a.validProperty().and(b.validProperty()).not())`.
+- **`TextFormatter` covers everything the Swing `DocumentFilter` did.** It
+  sees typing, pastes and `setText` alike, and the paste tidying slots into
+  the same filter.
+- **Wayland:** JavaFX runs through XWayland under the GNOME Wayland session,
+  as Swing does. `setX`/`setY` were honoured exactly (333, 222), and
+  remembered bounds work.
+- **Tests:** 8 tests start JavaFX with `Platform.startup` and run work on its
+  thread. Without a display they skip themselves, like `DFrameTest`.
+  Headless runs in CI would need Monocle (`org.testfx:openjfx-monocle`
+  21.0.2), which we haven't adopted yet.
+- **Screenshots** come from `Scene.snapshot`, copied to a `BufferedImage`
+  pixel by pixel, because `SwingFXUtils` would need the `javafx.swing`
+  module. The harness runs from the classpath, which makes JavaFX print its
+  "unsupported configuration" warning. The real app, run from the module
+  path, prints nothing.
 
 **Plugins:**
 - a plugin manager screen listing what's installed, with versions and

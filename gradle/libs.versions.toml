@@ -4,6 +4,8 @@ junit = "6.1.3"
 assertj = "3.27.7"
 anthropic = "2.65.0"
 joda-time = "2.14.4"
+javafx = "21.0.12"
+atlantafx = "2.1.0"
 
 [libraries]
 flatlaf = { module = "com.formdev:flatlaf", version.ref = "flatlaf" }
@@ -12,4 +14,5 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 joda-time = { module = "joda-time:joda-time", version.ref = "joda-time" }
+atlantafx = { module = "io.github.mkpaz:atlantafx-base", version.ref = "atlantafx" }
 anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
